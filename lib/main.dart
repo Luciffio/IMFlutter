@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'models/message.dart';
 import 'theme/persona_colors.dart';
+import 'widgets/input_bar.dart';
 import 'widgets/transcript.dart';
 
 void main() {
@@ -46,9 +47,26 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kPersonaRed,
-      body: GestureDetector(
-        onTap: _transcriptState.advance, // tap anywhere to show next message
-        child: Transcript(state: _transcriptState),
+      // resizeToAvoidBottomInset keeps the bar above the software keyboard
+      resizeToAvoidBottomInset: true,
+      body: Stack(
+        children: [
+          // Chat transcript — tap anywhere (except the bar) to advance
+          GestureDetector(
+            onTap: _transcriptState.advance,
+            child: Transcript(state: _transcriptState),
+          ),
+
+          // Input bar pinned to the bottom
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: InputBar(
+              onSend: (text) {
+                // TODO: send real message once backend is wired up
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

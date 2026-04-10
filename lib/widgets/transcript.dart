@@ -230,7 +230,8 @@ class _TranscriptState extends State<Transcript> {
       controller: _scrollCtrl,
       padding: EdgeInsets.only(
         top: 100 + MediaQuery.of(context).padding.top,
-        bottom: 100 + MediaQuery.of(context).padding.bottom,
+        // Extra 80 dp so the last item clears the floating InputBar (~70 dp)
+        bottom: 180 + MediaQuery.of(context).padding.bottom,
       ),
       itemCount: entries.length + 1, // +1 for TypingIndicator
       separatorBuilder: (_, __) => const SizedBox(height: kEntrySpacing),
