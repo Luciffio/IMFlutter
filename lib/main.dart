@@ -5,6 +5,7 @@ import 'services/chat_repository.dart';
 import 'services/mock_chat_repository.dart';
 // import 'services/telegram_repository.dart'; // ← swap here when backend ready
 import 'theme/persona_colors.dart';
+import 'widgets/chat_header.dart';
 import 'widgets/input_bar.dart';
 import 'widgets/transcript.dart';
 
@@ -82,7 +83,18 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             child: Transcript(state: _transcriptState),
           ),
 
-          // Input bar floats above the transcript
+          // Header pinned to top
+          Align(
+            alignment: Alignment.topCenter,
+            child: ChatHeader(
+              chatName: 'Phantom Thieves',
+              participants: Sender.values
+                  .where((s) => s != Sender.ren)
+                  .toList(),
+            ),
+          ),
+
+          // Input bar pinned to bottom
           Align(
             alignment: Alignment.bottomCenter,
             child: InputBar(onSend: _onSend),
