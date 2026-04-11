@@ -37,10 +37,16 @@ class ChatHeader extends StatelessWidget {
         children: [
           // ── Chat name — left, big stroked text, no background ─────────
           Expanded(
-            child: _StrokedText(
-              text: chatName,
-              fontSize: 36,
-              fontFamily: fontFamily,
+            child: Transform(
+              alignment: Alignment.centerLeft,
+              transform: Matrix4.identity()
+                ..translate(20.0, 0.0)   // shift right 20 px
+                ..rotateZ(-0.419),        // –24° tilt left
+              child: _StrokedText(
+                text: chatName,
+                fontSize: 36,
+                fontFamily: fontFamily,
+              ),
             ),
           ),
 
