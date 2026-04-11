@@ -38,11 +38,11 @@ class ChatHeader extends StatelessWidget {
             child: Transform(
               alignment: Alignment.centerLeft,
               transform: Matrix4.identity()
-                ..translate(20.0, 16.0)
-                ..rotateZ(-0.314), // –18°
+                ..translate(20.0, 28.0)  // shifted right + lower
+                ..rotateZ(-0.175),        // –10°
               child: const _StrokedText(
                 text: 'Phantom Thieves',
-                fontSize: 36,
+                fontSize: 48,
                 fontFamily: 'Fruktur',
               ),
             ),
