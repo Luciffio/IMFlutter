@@ -90,8 +90,8 @@ class _InputBarState extends State<InputBar> {
                 onTap: () {},
                 child: SvgPicture.asset(
                   'assets/icons/smile.svg',
-                  width: 32,
-                  height: 32,
+                  width: 44,
+                  height: 44,
                 ),
               ),
 
