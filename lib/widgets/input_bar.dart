@@ -92,10 +92,6 @@ class _InputBarState extends State<InputBar> {
                   'assets/icons/smile.svg',
                   width: 32,
                   height: 32,
-                  colorFilter: const ColorFilter.mode(
-                    Colors.black,
-                    BlendMode.srcIn,
-                  ),
                 ),
               ),
 
