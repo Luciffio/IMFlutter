@@ -3,6 +3,12 @@ import '../models/message.dart';
 import '../theme/persona_colors.dart';
 import 'persona_avatar.dart';
 
+// Fixed avatar dimensions — big enough to be readable, small enough to leave
+// room for the chat name on the left.
+const _avatarH = 56.0;
+const _avatarW = _avatarH * kAvatarWidth / kAvatarHeight; // ≈ 68 dp
+const _avatarOverlap = 14.0;
+
 class ChatHeader extends StatelessWidget {
   final String chatName;
   final List<Sender> participants;
@@ -15,64 +21,52 @@ class ChatHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final mq = MediaQuery.of(context);
-    final topPad = mq.padding.top;
-    final headerH = mq.size.height * 0.20; // 20 % of screen
+    final topPad = MediaQuery.of(context).padding.top;
 
-    // Avatar height fills most of the usable header area
-    final avatarH = (headerH - topPad - 12).clamp(56.0, 140.0);
-    final avatarW = avatarH * (kAvatarWidth / kAvatarHeight);
-    final avatarOverlap = avatarW * 0.22;
-
+    // Total width of the overlapping avatar strip
     final stripW = participants.isEmpty
         ? 0.0
-        : avatarW + (avatarW - avatarOverlap) * (participants.length - 1);
+        : _avatarW + (_avatarW - _avatarOverlap) * (participants.length - 1);
 
-    return SizedBox(
-      height: headerH,
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(16, topPad + 8, 12, 8),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            // ── Chat name — big stroked text, no background ───────────────
-            Expanded(
-              child: _StrokedText(
-                text: chatName,
-                fontSize: (avatarH * 0.38).clamp(20.0, 36.0),
-              ),
-            ),
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12, topPad + 8, 12, 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // ── Chat name — left, big stroked text, no background ─────────
+          const Expanded(
+            child: _StrokedText(text: 'Phantom Thieves', fontSize: 22),
+          ),
 
-            const SizedBox(width: 10),
+          const SizedBox(width: 10),
 
-            // ── Overlapping avatars ───────────────────────────────────────
-            SizedBox(
-              width: stripW,
-              height: avatarH,
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  for (int i = 0; i < participants.length; i++)
-                    Positioned(
-                      left: i * (avatarW - avatarOverlap),
-                      top: 0,
-                      child: _MiniAvatar(
-                        sender: participants[i],
-                        w: avatarW,
-                        h: avatarH,
-                      ),
+          // ── Avatar strip — right ──────────────────────────────────────
+          SizedBox(
+            width: stripW,
+            height: _avatarH,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                for (int i = 0; i < participants.length; i++)
+                  Positioned(
+                    left: i * (_avatarW - _avatarOverlap),
+                    top: 0,
+                    child: _MiniAvatar(
+                      sender: participants[i],
+                      w: _avatarW,
+                      h: _avatarH,
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ── Big white text with black stroke ────────────────────────────────────────
+// ── Stroked text ─────────────────────────────────────────────────────────────
 
 class _StrokedText extends StatelessWidget {
   final String text;
@@ -82,32 +76,30 @@ class _StrokedText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final base = TextStyle(
+    const base = TextStyle(
       fontFamily: 'OptimaNova',
       fontWeight: FontWeight.w900,
-      fontSize: fontSize,
       height: 1.15,
     );
 
     return Stack(
       children: [
-        // Black stroke layer (drawn first, under the fill)
         Text(
           text,
           style: base.copyWith(
+            fontSize: fontSize,
             foreground: Paint()
               ..style = PaintingStyle.stroke
-              ..strokeWidth = 6
+              ..strokeWidth = 5
               ..strokeJoin = StrokeJoin.round
               ..color = Colors.black,
           ),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
-        // White fill layer
         Text(
           text,
-          style: base.copyWith(color: Colors.white),
+          style: base.copyWith(fontSize: fontSize, color: Colors.white),
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
         ),
@@ -116,7 +108,7 @@ class _StrokedText extends StatelessWidget {
   }
 }
 
-// ── Mini avatar — PersonaAvatar scaled to fill the given slot ───────────────
+// ── Mini avatar ───────────────────────────────────────────────────────────────
 
 class _MiniAvatar extends StatelessWidget {
   final Sender sender;
