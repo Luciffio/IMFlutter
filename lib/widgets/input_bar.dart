@@ -102,7 +102,10 @@ class _InputBarState extends State<InputBar> {
                 child: const SizedBox(
                   width: 30,
                   height: 30,
-                  child: CustomPaint(painter: _TrianglePainter()),
+                  child: Padding(
+                    padding: EdgeInsets.all(6),
+                    child: CustomPaint(painter: _TrianglePainter()),
+                  ),
                 ),
               ),
 
@@ -117,7 +120,10 @@ class _InputBarState extends State<InputBar> {
 
 // ── Single bar background ──────────────────────────────────────────────────
 //
-// Slight parallelogram skew — same language as the chat bubbles.
+// Shape: \------|
+//   Left edge  — diagonal \ (top-left pushed right by skew, bottom-left at 0)
+//   Right edge — straight vertical | (same x on top and bottom)
+//   Right side — 10 % narrower: 5 % inset from top, 5 % inset from bottom
 
 class _BarPainter extends CustomPainter {
   const _BarPainter();
@@ -126,27 +132,28 @@ class _BarPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    const skew = 5.0; // top edge shifted right by this much
+    const skew = 8.0;          // how far the top-left corner is pushed right
+    final inset = h * 0.05;   // 5 % trim on each side → 10 % total at right edge
 
     // Black outline
     canvas.drawPath(
       Path()
-        ..moveTo(skew, 0)
-        ..lineTo(w, 0)
-        ..lineTo(w - skew, h)
-        ..lineTo(0, h)
+        ..moveTo(0, 0)         // TL — flush left at top   ← \ starts here
+        ..lineTo(w, inset)     // TR — right edge 5 % down
+        ..lineTo(w, h - inset) // BR — right edge 5 % up (vertical |)
+        ..lineTo(skew, h)      // BL — pushed right at bottom  \ ends here
         ..close(),
       Paint()..color = Colors.black,
     );
 
-    // White fill (inset 3 px on every side)
+    // White fill (3 px border)
     const b = 3.0;
     canvas.drawPath(
       Path()
-        ..moveTo(skew + b, b)
-        ..lineTo(w - b, b)
-        ..lineTo(w - skew - b, h - b)
-        ..lineTo(b, h - b)
+        ..moveTo(b, b)
+        ..lineTo(w - b, inset + b)
+        ..lineTo(w - b, h - inset - b)
+        ..lineTo(skew + b, h - b)
         ..close(),
       Paint()..color = Colors.white,
     );
@@ -168,7 +175,7 @@ class _PlusPainter extends CustomPainter {
     final p = Paint()
       ..color = Colors.black
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.8
+      ..strokeWidth = 5.5
       ..strokeCap = StrokeCap.square;
 
     canvas.drawLine(Offset(0, h / 2), Offset(w, h / 2), p); // horizontal
@@ -208,14 +215,13 @@ class _FacePainter extends CustomPainter {
     canvas.drawCircle(Offset(cx - r * 0.32, cy - r * 0.18), eyeR, fill);
     canvas.drawCircle(Offset(cx + r * 0.32, cy - r * 0.18), eyeR, fill);
 
-    // Smile arc — bottom half of an ellipse
+    // Smile — minimal short arc, just a gentle curve
     final smileRect = Rect.fromCenter(
-      center: Offset(cx, cy + r * 0.08),
-      width: r * 1.1,
-      height: r * 0.72,
+      center: Offset(cx, cy + r * 0.22),
+      width: r * 0.72,
+      height: r * 0.38,
     );
-    // startAngle: just past 3 o'clock going clockwise → bottom arc
-    canvas.drawArc(smileRect, 0.25, math.pi - 0.5, false, stroke);
+    canvas.drawArc(smileRect, 0.1, math.pi - 0.2, false, stroke);
   }
 
   @override
