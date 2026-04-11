@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 
 // One continuous Persona 5-styled bar:
 //   black outer parallelogram → white inner → [+] [text field] [face] [▶]
@@ -88,8 +87,8 @@ class _InputBarState extends State<InputBar> {
               // Custom emoji icon
               GestureDetector(
                 onTap: () {},
-                child: SvgPicture.asset(
-                  'assets/icons/smile.svg',
+                child: Image.asset(
+                  'assets/icons/smile.png',
                   width: 32,
                   height: 32,
                 ),
