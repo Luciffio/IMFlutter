@@ -12,11 +12,13 @@ const _avatarOverlap = 14.0;
 class ChatHeader extends StatelessWidget {
   final String chatName;
   final List<Sender> participants;
+  final String fontFamily;
 
   const ChatHeader({
     super.key,
     required this.chatName,
     required this.participants,
+    this.fontFamily = 'Bangers',
   });
 
   @override
@@ -34,8 +36,12 @@ class ChatHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           // ── Chat name — left, big stroked text, no background ─────────
-          const Expanded(
-            child: _StrokedText(text: 'Phantom Thieves', fontSize: 22),
+          Expanded(
+            child: _StrokedText(
+              text: chatName,
+              fontSize: 22,
+              fontFamily: fontFamily,
+            ),
           ),
 
           const SizedBox(width: 10),
@@ -71,13 +77,18 @@ class ChatHeader extends StatelessWidget {
 class _StrokedText extends StatelessWidget {
   final String text;
   final double fontSize;
+  final String fontFamily;
 
-  const _StrokedText({required this.text, required this.fontSize});
+  const _StrokedText({
+    required this.text,
+    required this.fontSize,
+    required this.fontFamily,
+  });
 
   @override
   Widget build(BuildContext context) {
-    const base = TextStyle(
-      fontFamily: 'OptimaNova',
+    final base = TextStyle(
+      fontFamily: fontFamily,
       fontWeight: FontWeight.w900,
       height: 1.15,
     );

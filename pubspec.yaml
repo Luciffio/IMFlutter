@@ -26,3 +26,12 @@ flutter:
       fonts:
         - asset: assets/fonts/optima_nova_black.ttf
           weight: 900
+    - family: Bangers
+      fonts:
+        - asset: fonts/Bangers/Bangers-Regular.ttf
+    - family: Boogaloo
+      fonts:
+        - asset: fonts/Boogaloo/Boogaloo-Regular.ttf
+    - family: PermanentMarker
+      fonts:
+        - asset: fonts/Permanent_Marker/PermanentMarker-Regular.ttf
