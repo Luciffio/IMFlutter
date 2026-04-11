@@ -42,7 +42,7 @@ class ChatHeader extends StatelessWidget {
                 ..rotateZ(-0.175),        // –10°
               child: const _StrokedText(
                 text: 'Phantom Thieves',
-                fontSize: 48,
+                fontSize: 40,
                 fontFamily: 'Fruktur',
               ),
             ),
