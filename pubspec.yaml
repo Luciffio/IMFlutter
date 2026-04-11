@@ -35,3 +35,11 @@ flutter:
     - family: PermanentMarker
       fonts:
         - asset: fonts/Permanent_Marker/PermanentMarker-Regular.ttf
+    - family: Fruktur
+      fonts:
+        - asset: fonts/Fruktur/Fruktur-Regular.ttf
+        - asset: fonts/Fruktur/Fruktur-Italic.ttf
+          style: italic
+    - family: RubikVinyl
+      fonts:
+        - asset: fonts/Rubik_Vinyl/RubikVinyl-Regular.ttf

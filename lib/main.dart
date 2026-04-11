@@ -40,8 +40,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   // 0 = Bangers, 1 = Boogaloo, 2 = PermanentMarker
   int _fontIndex = 0;
 
-  static const _fontFamilies = ['Bangers', 'Boogaloo', 'PermanentMarker'];
-  static const _fontLabels   = ['1 · Bangers', '2 · Boogaloo', '3 · Permanent Marker'];
+  static const _fontFamilies = ['Bangers', 'Boogaloo', 'PermanentMarker', 'Fruktur', 'RubikVinyl'];
+  static const _fontLabels   = ['1 · Bangers', '2 · Boogaloo', '3 · Permanent Marker', '4 · Fruktur', '5 · Rubik Vinyl'];
 
   @override
   void initState() {
