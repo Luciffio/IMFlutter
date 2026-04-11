@@ -39,7 +39,7 @@ class ChatHeader extends StatelessWidget {
           Expanded(
             child: _StrokedText(
               text: chatName,
-              fontSize: 22,
+              fontSize: 36,
               fontFamily: fontFamily,
             ),
           ),
