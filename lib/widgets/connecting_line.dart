@@ -46,14 +46,14 @@ class ConnectingLinePainter extends CustomPainter {
       ..lineTo(currBL.dx, currBL.dy)
       ..close();
 
-    // Shadow: translate 16px down, blurred
+    // Shadow: sharp, high-opacity, small offset — clearly visible
     canvas.save();
-    canvas.translate(0, 16);
+    canvas.translate(6, 10);
     canvas.drawPath(
       path,
       Paint()
-        ..color = Colors.black.withAlpha(128)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4),
+        ..color = Colors.black.withAlpha(200)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 1.5),
     );
     canvas.restore();
 
