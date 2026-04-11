@@ -40,8 +40,8 @@ class ChatHeader extends StatelessWidget {
             child: Transform(
               alignment: Alignment.centerLeft,
               transform: Matrix4.identity()
-                ..translate(20.0, 0.0)   // shift right 20 px
-                ..rotateZ(-0.419),        // –24° tilt left
+                ..translate(20.0, 16.0)  // shift right 20 px, down 16 px
+                ..rotateZ(-0.314),       // –18° tilt left
               child: _StrokedText(
                 text: chatName,
                 fontSize: 36,
