@@ -74,15 +74,29 @@ class TranscriptState extends ChangeNotifier {
   TranscriptState({required this.vsync, required List<Message> messages})
       : _messages = messages;
 
+  // ── Public API ────────────────────────────────────────────────────────────
+
+  /// Advance to the next pre-loaded demo message.
+  /// Loops back to the start when all messages have been shown.
   void advance() {
     if (_messageIndex >= _messages.length) {
       for (final e in _entries) e.dispose();
       _entries.clear();
       _messageIndex = 0;
+      notifyListeners();
+      return;
     }
+    _showMessage(_messages[_messageIndex++]);
+  }
 
-    final message = _messages[_messageIndex];
-    final position = _messageIndex++;
+  /// Add any message to the transcript immediately (user-sent or incoming
+  /// from the backend).  Called by ChatScreen — not tied to the demo sequence.
+  void addMessage(Message message) => _showMessage(message);
+
+  // ── Internal ───────────────────────────────────────────────────────────────
+
+  void _showMessage(Message message) {
+    final position = _entries.length;
 
     // Base line coordinates (horizontal shift applied later during finalization)
     final lineWidth =
@@ -151,13 +165,9 @@ class TranscriptState extends ChangeNotifier {
         Tween<double>(begin: 0.0, end: 1.0).animate(state.lineCtrl);
 
     // ── Finalize PREVIOUS entry ──────────────────────────────────────────
-    // Apply a tiny random jitter (±8 dp, no alternating direction) so
-    // consecutive same-side messages have slight visual variety without
-    // producing the forced left/right zigzag.  Ren messages are not shifted
-    // because their position is already anchored to the right by topDx in
-    // ConnectingLinePainter.
-    // Then FREEZE the bottom coords (= this entry's current coords) before
-    // starting the animation so later layout changes can't move the line.
+    // Tiny random jitter (±8 dp) for visual variety without forced zigzag.
+    // Then FREEZE bottom coords before starting the line animation so later
+    // shifts on `state` can't move the already-drawn line.
     if (_entries.isNotEmpty) {
       final prev = _entries.last;
       if (prev.message.sender != Sender.ren) {
@@ -165,7 +175,6 @@ class TranscriptState extends ChangeNotifier {
         prev.lineLeft = prev.lineLeft + Offset(shift, 0);
         prev.lineRight = prev.lineRight + Offset(shift, 0);
       }
-      // Freeze bottom coords at this exact moment
       prev.frozenBottomLeft = state.lineLeft;
       prev.frozenBottomRight = state.lineRight;
       prev.frozenNextIsRen = state.message.sender == Sender.ren;
