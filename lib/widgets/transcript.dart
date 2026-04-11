@@ -4,6 +4,7 @@ import '../models/message.dart';
 import '../theme/persona_colors.dart';
 import 'connecting_line.dart';
 import 'entry_bubble.dart';
+import 'image_bubble.dart';
 import 'reply_bubble.dart';
 import 'typing_indicator.dart';
 
@@ -106,6 +107,11 @@ class TranscriptState extends ChangeNotifier {
       final lx = kRenMessageCenterX - lineWidth / 2;
       lineLeft = Offset(lx, kRenMessageCenterY);
       lineRight = Offset(lx + lineWidth, kRenMessageCenterY);
+    } else if (message.isImage) {
+      // Line terminates at the visual center of the image frame
+      final lx = kImageCenterX - lineWidth / 2;
+      lineLeft = Offset(lx, kImageCenterY);
+      lineRight = Offset(lx + lineWidth, kImageCenterY);
     } else {
       final lx = kAvatarWidth / 2 - lineWidth / 2;
       lineLeft = Offset(lx, kAvatarHeight / 2);
@@ -170,7 +176,8 @@ class TranscriptState extends ChangeNotifier {
     // shifts on `state` can't move the already-drawn line.
     if (_entries.isNotEmpty) {
       final prev = _entries.last;
-      if (prev.message.sender != Sender.ren) {
+      // Skip jitter for image messages — their line is anchored at a fixed center
+      if (prev.message.sender != Sender.ren && !prev.message.isImage) {
         final shift = (_rng.nextDouble() * 16) - 8; // –8 … +8 dp
         prev.lineLeft = prev.lineLeft + Offset(shift, 0);
         prev.lineRight = prev.lineRight + Offset(shift, 0);
@@ -276,6 +283,13 @@ class _TranscriptState extends State<Transcript> {
         messageHorizontalScale: entry.msgHScale.value,
         messageVerticalScale: entry.msgVScale.value,
         messageTextAlpha: entry.msgAlpha.value,
+      );
+    } else if (entry.message.isImage) {
+      item = ImageBubble(
+        message: entry.message,
+        hScale: entry.msgHScale.value,
+        vScale: entry.msgVScale.value,
+        alpha: entry.msgAlpha.value,
       );
     } else {
       item = EntryBubble(

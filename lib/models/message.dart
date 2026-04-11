@@ -38,8 +38,11 @@ extension SenderInfo on Sender {
 class Message {
   final Sender sender;
   final String text;
+  final String? imagePath;
 
-  const Message({required this.sender, required this.text});
+  const Message({required this.sender, this.text = '', this.imagePath});
+
+  bool get isImage => imagePath != null;
 }
 
 final List<Message> kMessages = [
@@ -90,5 +93,13 @@ final List<Message> kMessages = [
   const Message(
     sender: Sender.ryuji,
     text: "Well guys, we gotta brace ourselves. We're up against a serious criminal here.",
+  ),
+  const Message(
+    sender: Sender.ann,
+    text: "Here's our commemorative photo from the summer festival!",
+  ),
+  const Message(
+    sender: Sender.ann,
+    imagePath: 'assets/images/template.jpg',
   ),
 ];
