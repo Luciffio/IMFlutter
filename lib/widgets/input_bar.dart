@@ -1,8 +1,8 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
-// Persona 5-styled bottom input bar.
-// Layout: [+ button] [text field──────────] [😊] [▶ send]
+// One continuous Persona 5-styled bar:
+//   black outer parallelogram → white inner → [+] [text field] [face] [▶]
 class InputBar extends StatefulWidget {
   final ValueChanged<String>? onSend;
   const InputBar({super.key, this.onSend});
@@ -31,135 +31,83 @@ class _InputBarState extends State<InputBar> {
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
     return Padding(
-      padding: EdgeInsets.fromLTRB(10, 0, 10, 10 + bottomPad),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          _PlusButton(onTap: () {}),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _InputField(controller: _ctrl, onSubmitted: (_) => _send()),
-          ),
-          const SizedBox(width: 8),
-          _EmojiButton(onTap: () {}),
-          const SizedBox(width: 6),
-          _SendButton(onTap: _send),
-        ],
-      ),
-    );
-  }
-}
-
-// ── + Button ───────────────────────────────────────────────────────────────
-
-class _PlusButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _PlusButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: 44,
-        height: 50,
-        child: CustomPaint(painter: _PlusButtonPainter()),
-      ),
-    );
-  }
-}
-
-class _PlusButtonPainter extends CustomPainter {
-  static const _angle = -0.18; // ≈ –10° — makes it look delightfully crooked
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-
-    canvas.save();
-    // Rotate around center
-    canvas.translate(w / 2, h / 2);
-    canvas.rotate(_angle);
-    canvas.translate(-w / 2, -h / 2);
-
-    // Outer black box (slight skew)
-    canvas.drawPath(
-      Path()
-        ..moveTo(3, 0)
-        ..lineTo(w, 1)
-        ..lineTo(w - 3, h)
-        ..lineTo(0, h - 1)
-        ..close(),
-      Paint()..color = Colors.black,
-    );
-
-    // Inner white box
-    canvas.drawPath(
-      Path()
-        ..moveTo(6, 3)
-        ..lineTo(w - 3, 4)
-        ..lineTo(w - 6, h - 3)
-        ..lineTo(3, h - 4)
-        ..close(),
-      Paint()..color = Colors.white,
-    );
-
-    // "+" — two thick rectangles
-    const arm = 9.0;
-    const thick = 3.5;
-    final cx = w / 2;
-    final cy = h / 2;
-    final bar = Paint()..color = Colors.black;
-    canvas.drawRect(Rect.fromLTRB(cx - arm, cy - thick, cx + arm, cy + thick), bar);
-    canvas.drawRect(Rect.fromLTRB(cx - thick, cy - arm, cx + thick, cy + arm), bar);
-
-    canvas.restore();
-  }
-
-  @override
-  bool shouldRepaint(_PlusButtonPainter old) => false;
-}
-
-// ── Input field ────────────────────────────────────────────────────────────
-
-class _InputField extends StatelessWidget {
-  final TextEditingController controller;
-  final ValueChanged<String>? onSubmitted;
-  const _InputField({required this.controller, this.onSubmitted});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 50,
+      padding: EdgeInsets.fromLTRB(8, 0, 8, 10 + bottomPad),
       child: CustomPaint(
-        painter: _InputFieldPainter(),
-        child: Padding(
-          // Left extra for the skew, right mirror
-          padding: const EdgeInsets.fromLTRB(18, 0, 14, 0),
-          child: Center(
-            child: TextField(
-              controller: controller,
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 14,
-                fontFamily: 'OptimaNova',
-                fontWeight: FontWeight.w900,
-              ),
-              decoration: const InputDecoration(
-                border: InputBorder.none,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-                hintText: 'Message...',
-                hintStyle: TextStyle(
-                  color: Colors.black38,
-                  fontSize: 14,
-                  fontFamily: 'OptimaNova',
-                  fontWeight: FontWeight.w900,
+        painter: const _BarPainter(),
+        child: SizedBox(
+          height: 54,
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              const SizedBox(width: 14),
+
+              // Crooked "+"
+              GestureDetector(
+                onTap: () {},
+                child: Transform.rotate(
+                  angle: -0.22, // ≈ –12.6° — pleasantly crooked
+                  child: const SizedBox(
+                    width: 26,
+                    height: 26,
+                    child: CustomPaint(painter: _PlusPainter()),
+                  ),
                 ),
               ),
-              onSubmitted: onSubmitted,
-            ),
+
+              const SizedBox(width: 14),
+
+              // Text field — takes all remaining space
+              Expanded(
+                child: TextField(
+                  controller: _ctrl,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontSize: 14,
+                    fontFamily: 'OptimaNova',
+                    fontWeight: FontWeight.w900,
+                  ),
+                  decoration: const InputDecoration(
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.zero,
+                    hintText: 'Message...',
+                    hintStyle: TextStyle(
+                      color: Colors.black38,
+                      fontSize: 14,
+                      fontFamily: 'OptimaNova',
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  onSubmitted: (_) => _send(),
+                ),
+              ),
+
+              const SizedBox(width: 12),
+
+              // Stylized emoji face
+              GestureDetector(
+                onTap: () {},
+                child: const SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: CustomPaint(painter: _FacePainter()),
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              // Right-pointing triangle send button
+              GestureDetector(
+                onTap: _send,
+                child: const SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: CustomPaint(painter: _TrianglePainter()),
+                ),
+              ),
+
+              const SizedBox(width: 14),
+            ],
           ),
         ),
       ),
@@ -167,31 +115,37 @@ class _InputField extends StatelessWidget {
   }
 }
 
-class _InputFieldPainter extends CustomPainter {
+// ── Single bar background ──────────────────────────────────────────────────
+//
+// Slight parallelogram skew — same language as the chat bubbles.
+
+class _BarPainter extends CustomPainter {
+  const _BarPainter();
+
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    // Parallelogram — top-left corner pushed right, bottom-left pushed left
-    const skewTop = 6.0;
-    const skewBot = 3.0;
+    const skew = 5.0; // top edge shifted right by this much
 
+    // Black outline
     canvas.drawPath(
       Path()
-        ..moveTo(skewTop, 0)
+        ..moveTo(skew, 0)
         ..lineTo(w, 0)
-        ..lineTo(w - skewBot, h)
+        ..lineTo(w - skew, h)
         ..lineTo(0, h)
         ..close(),
       Paint()..color = Colors.black,
     );
 
+    // White fill (inset 3 px on every side)
     const b = 3.0;
     canvas.drawPath(
       Path()
-        ..moveTo(skewTop + b, b)
+        ..moveTo(skew + b, b)
         ..lineTo(w - b, b)
-        ..lineTo(w - skewBot - b, h - b)
+        ..lineTo(w - skew - b, h - b)
         ..lineTo(b, h - b)
         ..close(),
       Paint()..color = Colors.white,
@@ -199,100 +153,94 @@ class _InputFieldPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_InputFieldPainter old) => false;
+  bool shouldRepaint(_BarPainter old) => false;
 }
 
-// ── Emoji button ───────────────────────────────────────────────────────────
+// ── "+" — two stroked lines, drawn with square caps ────────────────────────
 
-class _EmojiButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _EmojiButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: const SizedBox(
-        width: 36,
-        height: 36,
-        child: Center(
-          child: Text('😊', style: TextStyle(fontSize: 22)),
-        ),
-      ),
-    );
-  }
-}
-
-// ── Send button (right-pointing triangle inside a skewed box) ──────────────
-
-class _SendButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _SendButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: SizedBox(
-        width: 50,
-        height: 50,
-        child: CustomPaint(painter: _SendButtonPainter()),
-      ),
-    );
-  }
-}
-
-class _SendButtonPainter extends CustomPainter {
-  static const _angle = 0.12; // ≈ +7° — slight tilt opposite to "+"
+class _PlusPainter extends CustomPainter {
+  const _PlusPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
+    final p = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.8
+      ..strokeCap = StrokeCap.square;
 
-    canvas.save();
-    canvas.translate(w / 2, h / 2);
-    canvas.rotate(_angle);
-    canvas.translate(-w / 2, -h / 2);
-
-    // Outer black box
-    canvas.drawPath(
-      Path()
-        ..moveTo(0, 1)
-        ..lineTo(w - 3, 0)
-        ..lineTo(w, h - 1)
-        ..lineTo(3, h)
-        ..close(),
-      Paint()..color = Colors.black,
-    );
-
-    // Inner white box
-    canvas.drawPath(
-      Path()
-        ..moveTo(3, 4)
-        ..lineTo(w - 6, 3)
-        ..lineTo(w - 3, h - 4)
-        ..lineTo(6, h - 3)
-        ..close(),
-      Paint()..color = Colors.white,
-    );
-
-    // Right-pointing triangle (▶)
-    final cx = w / 2 + 1;
-    final cy = h / 2;
-    const half = 10.0;
-    canvas.drawPath(
-      Path()
-        ..moveTo(cx - half * 0.65, cy - half)
-        ..lineTo(cx + half, cy)
-        ..lineTo(cx - half * 0.65, cy + half)
-        ..close(),
-      Paint()..color = Colors.black,
-    );
-
-    canvas.restore();
+    canvas.drawLine(Offset(0, h / 2), Offset(w, h / 2), p); // horizontal
+    canvas.drawLine(Offset(w / 2, 0), Offset(w / 2, h), p); // vertical
   }
 
   @override
-  bool shouldRepaint(_SendButtonPainter old) => false;
+  bool shouldRepaint(_PlusPainter old) => false;
+}
+
+// ── Stylized smiley face (circle + dot eyes + arc smile) ───────────────────
+
+class _FacePainter extends CustomPainter {
+  const _FacePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    final cx = w / 2;
+    final cy = h / 2;
+    final r = math.min(w, h) / 2 - 1.5;
+
+    final stroke = Paint()
+      ..color = Colors.black
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.2
+      ..strokeCap = StrokeCap.round;
+
+    final fill = Paint()..color = Colors.black;
+
+    // Circle
+    canvas.drawCircle(Offset(cx, cy), r, stroke);
+
+    // Eyes — small filled circles
+    final eyeR = r * 0.11;
+    canvas.drawCircle(Offset(cx - r * 0.32, cy - r * 0.18), eyeR, fill);
+    canvas.drawCircle(Offset(cx + r * 0.32, cy - r * 0.18), eyeR, fill);
+
+    // Smile arc — bottom half of an ellipse
+    final smileRect = Rect.fromCenter(
+      center: Offset(cx, cy + r * 0.08),
+      width: r * 1.1,
+      height: r * 0.72,
+    );
+    // startAngle: just past 3 o'clock going clockwise → bottom arc
+    canvas.drawArc(smileRect, 0.25, math.pi - 0.5, false, stroke);
+  }
+
+  @override
+  bool shouldRepaint(_FacePainter old) => false;
+}
+
+// ── Right-pointing filled triangle ─────────────────────────────────────────
+
+class _TrianglePainter extends CustomPainter {
+  const _TrianglePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+    canvas.drawPath(
+      Path()
+        ..moveTo(0, 0)
+        ..lineTo(w, h / 2)
+        ..lineTo(0, h)
+        ..close(),
+      Paint()..color = Colors.black,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_TrianglePainter old) => false;
 }
