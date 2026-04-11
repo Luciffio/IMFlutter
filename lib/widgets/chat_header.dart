@@ -10,15 +10,13 @@ const _avatarW = _avatarH * kAvatarWidth / kAvatarHeight; // ≈ 68 dp
 const _avatarOverlap = 14.0;
 
 class ChatHeader extends StatelessWidget {
+  // ignore: unused_field — will be dynamic once backend provides chat info
   final String chatName;
   final List<Sender> participants;
-  final String fontFamily;
-
   const ChatHeader({
     super.key,
     required this.chatName,
     required this.participants,
-    this.fontFamily = 'Bangers',
   });
 
   @override
@@ -40,12 +38,12 @@ class ChatHeader extends StatelessWidget {
             child: Transform(
               alignment: Alignment.centerLeft,
               transform: Matrix4.identity()
-                ..translate(20.0, 16.0)  // shift right 20 px, down 16 px
-                ..rotateZ(-0.314),       // –18° tilt left
-              child: _StrokedText(
-                text: chatName,
+                ..translate(20.0, 16.0)
+                ..rotateZ(-0.314), // –18°
+              child: const _StrokedText(
+                text: 'Phantom Thieves',
                 fontSize: 36,
-                fontFamily: fontFamily,
+                fontFamily: 'Fruktur',
               ),
             ),
           ),

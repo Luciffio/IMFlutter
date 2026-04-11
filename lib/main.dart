@@ -37,12 +37,6 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   late final ChatRepository _chatRepo;
   StreamSubscription<Message>? _incomingSub;
 
-  // 0 = Bangers, 1 = Boogaloo, 2 = PermanentMarker
-  int _fontIndex = 0;
-
-  static const _fontFamilies = ['Bangers', 'Boogaloo', 'PermanentMarker', 'Fruktur', 'RubikVinyl'];
-  static const _fontLabels   = ['1 · Bangers', '2 · Boogaloo', '3 · Permanent Marker', '4 · Fruktur', '5 · Rubik Vinyl'];
-
   @override
   void initState() {
     super.initState();
@@ -83,76 +77,20 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             child: Transcript(state: _transcriptState),
           ),
 
-          // Header
           Align(
             alignment: Alignment.topCenter,
             child: ChatHeader(
               chatName: 'Phantom Thieves',
               participants: Sender.values.where((s) => s != Sender.ren).toList(),
-              fontFamily: _fontFamilies[_fontIndex],
             ),
           ),
 
-          // Input bar
           Align(
             alignment: Alignment.bottomCenter,
             child: InputBar(onSend: _onSend),
           ),
-
-          // ── DEBUG font picker ─────────────────────────────────────────
-          Positioned(
-            bottom: 90,
-            left: 0,
-            right: 0,
-            child: _FontDebugBar(
-              index: _fontIndex,
-              labels: _fontLabels,
-              onChanged: (i) => setState(() => _fontIndex = i),
-            ),
-          ),
         ],
       ),
-    );
-  }
-}
-
-// ── Debug slider widget ────────────────────────────────────────────────────
-
-class _FontDebugBar extends StatelessWidget {
-  final int index;
-  final List<String> labels;
-  final ValueChanged<int> onChanged;
-
-  const _FontDebugBar({
-    required this.index,
-    required this.labels,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          labels[index],
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 12,
-            fontWeight: FontWeight.bold,
-            shadows: [Shadow(color: Colors.black, blurRadius: 4)],
-          ),
-        ),
-        Slider(
-          value: index.toDouble(),
-          min: 0,
-          max: (labels.length - 1).toDouble(),
-          divisions: labels.length - 1,
-          activeColor: Colors.white,
-          inactiveColor: Colors.white38,
-          onChanged: (v) => onChanged(v.round()),
-        ),
-      ],
     );
   }
 }
