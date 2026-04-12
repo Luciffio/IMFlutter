@@ -108,7 +108,8 @@ class TranscriptState extends ChangeNotifier {
       lineLeft = Offset(lx, kRenMessageCenterY);
       lineRight = Offset(lx + lineWidth, kRenMessageCenterY);
     } else if (message.isImage) {
-      // Line terminates at the visual center of the image frame
+      // Line anchors at the top edge of the image bubble (within the transparent
+      // topPad area) so the connecting-line shadow remains visible.
       final lx = kImageCenterX - lineWidth / 2;
       lineLeft = Offset(lx, kImageCenterY);
       lineRight = Offset(lx + lineWidth, kImageCenterY);

@@ -14,8 +14,11 @@ const kMaxLineWidth = 60.0;
 
 // Image bubble layout constants
 // Frame fills ~screen width (screenWidth - 24), centered.
-// topPad=14 is applied inside the bubble so the rotated frame never bleeds
-// into the gap above; kImageCenterY accounts for that offset.
-// Approximations for a ~360 dp wide screen.
+// The frame is rotated –4.5°: its top border at the connecting line's x-range
+// (≈154..206 dp) sits at y ≈ 22..28 dp in the widget's coordinate space.
+// kImageCenterY must be > 28 so the line terminus falls inside the frame with
+// no visible gap.  35 dp gives a comfortable ~7 dp margin across screen sizes.
+// The transparent topPad (0..20 dp) above the frame stays clear, so the
+// connecting-line shadow (+10 dp offset) is visible there.
 const kImageCenterX = 180.0; // ≈ screenWidth / 2
-const kImageCenterY = 134.0; // ≈ topPad(20) + (screenWidth-24)*0.68/2
+const kImageCenterY = 35.0;  // inside the frame top — eliminates the gap
