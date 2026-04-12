@@ -39,10 +39,17 @@ class Message {
   final Sender sender;
   final String text;
   final String? imagePath;
+  final String? stickerPath;
 
-  const Message({required this.sender, this.text = '', this.imagePath});
+  const Message({
+    required this.sender,
+    this.text = '',
+    this.imagePath,
+    this.stickerPath,
+  });
 
   bool get isImage => imagePath != null;
+  bool get isSticker => stickerPath != null;
 }
 
 final List<Message> kMessages = [
@@ -101,5 +108,13 @@ final List<Message> kMessages = [
   const Message(
     sender: Sender.ann,
     imagePath: 'assets/images/template.jpg',
+  ),
+  const Message(
+    sender: Sender.ryuji,
+    stickerPath: 'assets/stickers/sticker.webp',
+  ),
+  const Message(
+    sender: Sender.ann,
+    stickerPath: 'assets/stickers/sticker.webm',
   ),
 ];

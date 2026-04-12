@@ -6,6 +6,7 @@ import 'connecting_line.dart';
 import 'entry_bubble.dart';
 import 'image_bubble.dart';
 import 'reply_bubble.dart';
+import 'sticker_bubble.dart';
 import 'typing_indicator.dart';
 
 // ── Per-message animation state ────────────────────────────────────────────
@@ -290,6 +291,14 @@ class _TranscriptState extends State<Transcript> {
         message: entry.message,
         hScale: entry.msgHScale.value,
         vScale: entry.msgVScale.value,
+        alpha: entry.msgAlpha.value,
+      );
+    } else if (entry.message.isSticker) {
+      item = StickerBubble(
+        message: entry.message,
+        avatarBackgroundScale: entry.avatarBgScale.value,
+        avatarForegroundScale: entry.avatarFgScale.value,
+        scale: entry.msgHScale.value,
         alpha: entry.msgAlpha.value,
       );
     } else {
