@@ -26,6 +26,7 @@ class _EntryState {
   Offset? frozenBottomLeft;
   Offset? frozenBottomRight;
   bool frozenNextIsRen = false;
+  bool frozenNextIsSticker = false;
 
   late final AnimationController avatarBgCtrl;
   late final AnimationController avatarFgCtrl;
@@ -179,7 +180,7 @@ class TranscriptState extends ChangeNotifier {
     if (_entries.isNotEmpty) {
       final prev = _entries.last;
       // Skip jitter for image messages — their line is anchored at a fixed center
-      if (prev.message.sender != Sender.ren && !prev.message.isImage) {
+      if (prev.message.sender != Sender.ren && !prev.message.isImage && !prev.message.isSticker) {
         final shift = (_rng.nextDouble() * 16) - 8; // –8 … +8 dp
         prev.lineLeft = prev.lineLeft + Offset(shift, 0);
         prev.lineRight = prev.lineRight + Offset(shift, 0);
@@ -187,6 +188,7 @@ class TranscriptState extends ChangeNotifier {
       prev.frozenBottomLeft = state.lineLeft;
       prev.frozenBottomRight = state.lineRight;
       prev.frozenNextIsRen = state.message.sender == Sender.ren;
+      prev.frozenNextIsSticker = state.message.isSticker;
       prev.lineCtrl.forward();
     }
 
@@ -319,9 +321,11 @@ class _TranscriptState extends State<Transcript> {
     return CustomPaint(
       painter: ConnectingLinePainter(
         currentIsRen: entry.message.sender == Sender.ren,
+        currentIsSticker: entry.message.isSticker,
         currentLineLeft: entry.lineLeft,
         currentLineRight: entry.lineRight,
         nextIsRen: entry.frozenNextIsRen,
+        nextIsSticker: entry.frozenNextIsSticker,
         nextLineLeft: entry.frozenBottomLeft!,
         nextLineRight: entry.frozenBottomRight!,
         lineProgress: entry.lineProgress.value,
