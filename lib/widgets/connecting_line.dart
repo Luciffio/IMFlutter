@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../theme/persona_colors.dart';
 
+enum LineStyle { straight, zJog }
+
 // Mirrors connectingLineModifier.kt
 // Painter knows both senders so it can compute x-offsets from size.width in paint().
 class ConnectingLinePainter extends CustomPainter {
@@ -14,6 +16,16 @@ class ConnectingLinePainter extends CustomPainter {
   final Offset nextLineRight;
   final double lineProgress;
 
+  /// Visual style for this connecting line segment.
+  final LineStyle lineStyle;
+
+  /// Horizontal offset for a Z-shaped jog in the middle of the line.
+  /// 0 = straight line (no jog), >0 = jog right, <0 = jog left.
+  final double jogOffsetX;
+
+  /// Where along the line the jog/pinch sits (0.0 = top, 1.0 = bottom).
+  final double jogFraction;
+
   const ConnectingLinePainter({
     required this.currentIsRen,
     this.currentIsSticker = false,
@@ -24,6 +36,9 @@ class ConnectingLinePainter extends CustomPainter {
     required this.nextLineLeft,
     required this.nextLineRight,
     required this.lineProgress,
+    this.lineStyle = LineStyle.straight,
+    this.jogOffsetX = 0,
+    this.jogFraction = 0.5,
   });
 
   @override
@@ -39,7 +54,7 @@ class ConnectingLinePainter extends CustomPainter {
 
     final path = (currentIsSticker || nextIsSticker)
         ? _buildElbowPath(topLeft, topRight, finalBL, finalBR, size)
-        : _buildStraightPath(topLeft, topRight, finalBL, finalBR);
+        : _buildStylePath(topLeft, topRight, finalBL, finalBR);
 
     canvas.save();
     canvas.translate(6, 10);
@@ -47,6 +62,15 @@ class ConnectingLinePainter extends CustomPainter {
     canvas.restore();
 
     canvas.drawPath(path, Paint()..color = Colors.black);
+  }
+
+  Path _buildStylePath(Offset tl, Offset tr, Offset bl, Offset br) {
+    switch (lineStyle) {
+      case LineStyle.zJog:
+        return _buildJogPath(tl, tr, bl, br);
+      case LineStyle.straight:
+        return _buildStraightPath(tl, tr, bl, br);
+    }
   }
 
   /// Normal straight trapezoid (original behaviour).
@@ -58,6 +82,43 @@ class ConnectingLinePainter extends CustomPainter {
       ..lineTo(tr.dx, tr.dy)
       ..lineTo(currBR.dx, currBR.dy)
       ..lineTo(currBL.dx, currBL.dy)
+      ..close();
+  }
+
+  /// Kinked path: both edges flow as continuous diagonals through a common
+  /// midpoint that is shifted horizontally by [jogOffsetX].  No horizontal
+  /// step — the band stays visually connected, just bends at [jogFraction].
+  Path _buildJogPath(Offset tl, Offset tr, Offset bl, Offset br) {
+    // Single shared midpoint shifted off the straight-line position.
+    final midL = Offset.lerp(tl, bl, jogFraction)! + Offset(jogOffsetX, 0);
+    final midR = Offset.lerp(tr, br, jogFraction)! + Offset(jogOffsetX, 0);
+
+    if (lineProgress <= jogFraction) {
+      // Growing upper trapezoid toward the kink point.
+      final t = jogFraction > 0 ? lineProgress / jogFraction : 1.0;
+      final cBL = Offset.lerp(tl, midL, t)!;
+      final cBR = Offset.lerp(tr, midR, t)!;
+      return Path()
+        ..moveTo(tl.dx, tl.dy)
+        ..lineTo(tr.dx, tr.dy)
+        ..lineTo(cBR.dx, cBR.dy)
+        ..lineTo(cBL.dx, cBL.dy)
+        ..close();
+    }
+
+    // Full upper half + growing lower half (6-point hexagon).
+    final t2 = (1 - jogFraction) > 0
+        ? (lineProgress - jogFraction) / (1 - jogFraction)
+        : 1.0;
+    final cBL = Offset.lerp(midL, bl, t2)!;
+    final cBR = Offset.lerp(midR, br, t2)!;
+    return Path()
+      ..moveTo(tl.dx, tl.dy)
+      ..lineTo(tr.dx, tr.dy)
+      ..lineTo(midR.dx, midR.dy)
+      ..lineTo(cBR.dx, cBR.dy)
+      ..lineTo(cBL.dx, cBL.dy)
+      ..lineTo(midL.dx, midL.dy)
       ..close();
   }
 
@@ -156,6 +217,9 @@ class ConnectingLinePainter extends CustomPainter {
   @override
   bool shouldRepaint(ConnectingLinePainter old) =>
       old.lineProgress != lineProgress ||
+      old.lineStyle != lineStyle ||
+      old.jogOffsetX != jogOffsetX ||
+      old.jogFraction != jogFraction ||
       old.currentLineLeft != currentLineLeft ||
       old.currentLineRight != currentLineRight ||
       old.nextLineLeft != nextLineLeft ||

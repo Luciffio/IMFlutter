@@ -28,6 +28,11 @@ class _EntryState {
   bool frozenNextIsRen = false;
   bool frozenNextIsSticker = false;
 
+  // Line style assigned when this entry's connecting line is finalized.
+  LineStyle lineStyle = LineStyle.straight;
+  double jogOffsetX = 0;
+  double jogFraction = 0.5;
+
   late final AnimationController avatarBgCtrl;
   late final AnimationController avatarFgCtrl;
   late final AnimationController msgHCtrl;
@@ -189,6 +194,24 @@ class TranscriptState extends ChangeNotifier {
       prev.frozenBottomRight = state.lineRight;
       prev.frozenNextIsRen = state.message.sender == Sender.ren;
       prev.frozenNextIsSticker = state.message.isSticker;
+
+      // Random line shape: Z-jog only on cross-sender connections.
+      // The jog goes AGAINST the direction of travel to form a proper Z-shape.
+      if (!prev.message.isSticker && !state.message.isSticker) {
+        final crossSender = prev.message.sender != state.message.sender;
+        if (crossSender && _rng.nextDouble() < 0.55) {
+          prev.lineStyle = LineStyle.zJog;
+          final mag = 12.0 + _rng.nextDouble() * 8.0; // 12..20 dp
+          // Going left→Ren means line travels right → jog left (negative).
+          // Going Ren→left means line travels left → jog right (positive).
+          final goingRight = state.message.sender == Sender.ren;
+          prev.jogOffsetX = goingRight ? -mag : mag;
+          prev.jogFraction = 0.30 + _rng.nextDouble() * 0.35; // 0.30..0.65
+        } else {
+          prev.lineStyle = LineStyle.straight;
+        }
+      }
+
       prev.lineCtrl.forward();
     }
 
@@ -329,6 +352,9 @@ class _TranscriptState extends State<Transcript> {
         nextLineLeft: entry.frozenBottomLeft!,
         nextLineRight: entry.frozenBottomRight!,
         lineProgress: entry.lineProgress.value,
+        lineStyle: entry.lineStyle,
+        jogOffsetX: entry.jogOffsetX,
+        jogFraction: entry.jogFraction,
       ),
       child: item,
     );
