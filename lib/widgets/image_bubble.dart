@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/message.dart';
 import '../theme/persona_colors.dart';
@@ -66,6 +67,19 @@ class ImageBubble extends StatelessWidget {
     });
   }
 
+  // Bundled assets start with "assets/"; anything else is a file path from
+  // the gallery (image_picker) and must be rendered with Image.file.
+  Widget _imageFor(String path) {
+    if (path.startsWith('assets/')) {
+      return Image.asset(path, fit: BoxFit.cover);
+    }
+    return Image.file(
+      File(path),
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+    );
+  }
+
   Widget _buildFrame(double w, double h) {
     return Transform(
       transform: Matrix4.diagonal3Values(hScale, vScale, 1.0),
@@ -87,10 +101,7 @@ class ImageBubble extends StatelessWidget {
                   clipper: const _FrameClipper(),
                   child: Opacity(
                     opacity: alpha.clamp(0.0, 1.0),
-                    child: Image.asset(
-                      message.imagePath!,
-                      fit: BoxFit.cover,
-                    ),
+                    child: _imageFor(message.imagePath!),
                   ),
                 ),
               ),

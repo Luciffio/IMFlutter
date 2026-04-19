@@ -1,12 +1,14 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:image_picker/image_picker.dart';
 
 // One continuous Persona 5-styled bar:
 //   black outer parallelogram → white inner → [+] [text field] [face] [▶]
 class InputBar extends StatefulWidget {
   final ValueChanged<String>? onSend;
-  const InputBar({super.key, this.onSend});
+  final ValueChanged<String>? onSendImage;
+  const InputBar({super.key, this.onSend, this.onSendImage});
 
   @override
   State<InputBar> createState() => _InputBarState();
@@ -14,12 +16,29 @@ class InputBar extends StatefulWidget {
 
 class _InputBarState extends State<InputBar> {
   final _ctrl = TextEditingController();
+  final _picker = ImagePicker();
 
   void _send() {
     final text = _ctrl.text.trim();
     if (text.isEmpty) return;
     widget.onSend?.call(text);
     _ctrl.clear();
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final file = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1920,
+        maxHeight: 1920,
+        imageQuality: 90,
+      );
+      if (file != null) {
+        widget.onSendImage?.call(file.path);
+      }
+    } catch (e) {
+      debugPrint('Image picker error: $e');
+    }
   }
 
   @override
@@ -42,9 +61,9 @@ class _InputBarState extends State<InputBar> {
             children: [
               const SizedBox(width: 14),
 
-              // Crooked "+"
+              // Crooked "+" — opens gallery to pick an image
               GestureDetector(
-                onTap: () {},
+                onTap: _pickImage,
                 child: Transform.rotate(
                   angle: -0.22, // ≈ –12.6° — pleasantly crooked
                   child: const SizedBox(

@@ -304,14 +304,8 @@ class _TranscriptState extends State<Transcript> {
 
   Widget _buildItem(_EntryState entry) {
     Widget item;
-    if (entry.message.sender == Sender.ren) {
-      item = ReplyBubble(
-        text: entry.message.text,
-        messageHorizontalScale: entry.msgHScale.value,
-        messageVerticalScale: entry.msgVScale.value,
-        messageTextAlpha: entry.msgAlpha.value,
-      );
-    } else if (entry.message.isImage) {
+    // Content type takes priority over sender — Ren can send images/stickers too.
+    if (entry.message.isImage) {
       item = ImageBubble(
         message: entry.message,
         hScale: entry.msgHScale.value,
@@ -325,6 +319,13 @@ class _TranscriptState extends State<Transcript> {
         avatarForegroundScale: entry.avatarFgScale.value,
         scale: entry.msgHScale.value,
         alpha: entry.msgAlpha.value,
+      );
+    } else if (entry.message.sender == Sender.ren) {
+      item = ReplyBubble(
+        text: entry.message.text,
+        messageHorizontalScale: entry.msgHScale.value,
+        messageVerticalScale: entry.msgVScale.value,
+        messageTextAlpha: entry.msgAlpha.value,
       );
     } else {
       item = EntryBubble(

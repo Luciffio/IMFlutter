@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'models/message.dart';
 import 'services/chat_repository.dart';
 import 'services/mock_chat_repository.dart';
-// import 'services/telegram_repository.dart'; // ← swap here when backend ready
+// import 'services/tele  gram_repository.dart'; // ← swap here when backend ready
 import 'theme/persona_colors.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/input_bar.dart';
@@ -65,6 +65,10 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _chatRepo.sendMessage(text);
   }
 
+  void _onSendImage(String path) {
+    _transcriptState.addMessage(Message(sender: Sender.ren, imagePath: path));
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -87,7 +91,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
           Align(
             alignment: Alignment.bottomCenter,
-            child: InputBar(onSend: _onSend),
+            child: InputBar(onSend: _onSend, onSendImage: _onSendImage),
           ),
         ],
       ),

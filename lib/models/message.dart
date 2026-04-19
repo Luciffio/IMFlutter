@@ -117,4 +117,8 @@ final List<Message> kMessages = [
     sender: Sender.ann,
     stickerPath: 'assets/stickers/sticker.webm',
   ),
+  const Message(
+    sender: Sender.yusuke,
+    stickerPath: 'assets/stickers/persona4.gif',
+  ),
 ];
