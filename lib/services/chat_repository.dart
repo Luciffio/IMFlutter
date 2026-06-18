@@ -1,3 +1,4 @@
+import '../models/chat_summary.dart';
 import '../models/message.dart';
 
 /// Abstraction over the chat backend.
@@ -16,4 +17,8 @@ abstract class ChatRepository {
 
   /// Clean up connections and resources.
   Future<void> disconnect();
+
+  /// List of chats for the current user, ordered by [ChatSummary.updatedAt]
+  /// descending.  The chat list screen calls this once on open.
+  Future<List<ChatSummary>> getChats();
 }

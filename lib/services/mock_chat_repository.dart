@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:flutter/material.dart';
+import '../models/chat_summary.dart';
 import '../models/message.dart';
 import 'chat_repository.dart';
 
@@ -27,5 +29,65 @@ class MockChatRepository implements ChatRepository {
   @override
   Future<void> disconnect() async {
     await _controller.close();
+  }
+
+  @override
+  Future<List<ChatSummary>> getChats() async {
+    // P5-themed placeholders.  Each chat reuses bundled portraits so the
+    // avatar badges render with real faces until Telegram contacts are wired.
+    const ann = ChatParticipant(
+      name: 'Ann',
+      portraitAsset: 'assets/portraits/ann.png',
+      color: Color(0xFFFE93C9),
+    );
+    const ryuji = ChatParticipant(
+      name: 'Ryuji',
+      portraitAsset: 'assets/portraits/ryuji.png',
+      color: Color(0xFFF0EA40),
+    );
+    const yusuke = ChatParticipant(
+      name: 'Yusuke',
+      portraitAsset: 'assets/portraits/yusuke.png',
+      color: Color(0xFF1BC8F9),
+    );
+
+    return [
+      ChatSummary(
+        id: 'phantom-thieves',
+        title: 'After school',
+        updatedAt: DateTime(2016, 4, 19),
+        participants: const [ann, ryuji, yusuke],
+      ),
+      ChatSummary(
+        id: 'ann',
+        title: 'Calling card?',
+        updatedAt: DateTime(2016, 4, 19),
+        participants: const [ann],
+      ),
+      ChatSummary(
+        id: 'group-today',
+        title: 'So tired...',
+        updatedAt: DateTime(2016, 4, 18),
+        participants: const [ryuji, yusuke],
+      ),
+      ChatSummary(
+        id: 'yusuke',
+        title: 'Palace?',
+        updatedAt: DateTime(2016, 4, 18),
+        participants: const [yusuke],
+      ),
+      ChatSummary(
+        id: 'ryuji',
+        title: 'Ran into Kamoshida',
+        updatedAt: DateTime(2016, 4, 18),
+        participants: const [ryuji],
+      ),
+      ChatSummary(
+        id: 'ann-private',
+        title: 'I saw Shiho today...',
+        updatedAt: DateTime(2016, 4, 17),
+        participants: const [ann],
+      ),
+    ];
   }
 }

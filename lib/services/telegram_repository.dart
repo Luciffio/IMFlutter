@@ -1,3 +1,4 @@
+import '../models/chat_summary.dart';
 import '../models/message.dart';
 import 'chat_repository.dart';
 
@@ -6,24 +7,33 @@ import 'chat_repository.dart';
 ///
 /// ── Integration plan ──────────────────────────────────────────────────────
 ///
-/// 1. Add a TDLib package to pubspec.yaml, e.g.:
-///      tdlib: ^0.x.x        # https://pub.dev/packages/tdlib
-///      telegram_client: ...  # alternative pure-Dart client
+/// 1. Pick a client library:
+///      tdlib: ^0.x.x         # https://pub.dev/packages/tdlib — bundles
+///                              libtdjson for iOS/Android/desktop
+///      telegram_client: ...  # pure-Dart MTProto alternative
 ///
-/// 2. [connect] — authenticate:
-///      - Initialise TDLib with apiId / apiHash
-///      - Handle the auth flow: phone number → SMS code → 2FA password
-///      - Store the session so the user only logs in once
+/// 2. [connect] — initialise the client and run the auth flow:
+///      - TdlibParameters(apiId, apiHash, systemLanguageCode, ...)
+///      - Handle authorizationStateWaitPhoneNumber → send phone
+///      - Handle authorizationStateWaitCode        → user enters SMS code
+///      - Handle authorizationStateWaitPassword    → 2FA password
+///      - Handle authorizationStateReady           → ready to use
+///      - Persist the session DB so the user logs in once.
 ///
-/// 3. [sendMessage] — forward to Telegram:
-///      tdlib.sendMessage(chatId: _activeChatId, text: text)
+/// 3. [getChats] — load the chat list:
+///      - Call getChats(chatList: chatListMain, limit: 100)
+///      - For each id → getChat(id) → getUser(id) / getBasicGroup / getSupergroup
+///      - Download profile photos (downloadFile on the small photo)
+///      - Map to [ChatSummary] + [ChatParticipant]
 ///
-/// 4. [incomingMessages] — receive updates:
-///      - Subscribe to TDLib updateNewMessage events
-///      - Map TDLib Message → local Message model
+/// 4. [sendMessage] — forward to Telegram:
+///      tdlib.sendMessage(chatId: activeChatId, text: text)
+///
+/// 5. [incomingMessages] — stream updateNewMessage events:
+///      - Subscribe, map TDLib Message → local [Message] model
 ///      - Push into the stream so ChatScreen can call addMessage()
 ///
-/// 5. Swap in main.dart:
+/// 6. Swap in main.dart:
 ///      _chatRepository = TelegramRepository(
 ///        apiId: const int.fromEnvironment('TG_API_ID'),
 ///        apiHash: const String.fromEnvironment('TG_API_HASH'),
@@ -62,5 +72,12 @@ class TelegramRepository implements ChatRepository {
   Future<void> disconnect() {
     // TODO: tdlib.close()
     throw UnimplementedError('TelegramRepository.disconnect()');
+  }
+
+  @override
+  Future<List<ChatSummary>> getChats() {
+    // TODO: tdlib.getChats(chatList: chatListMain, limit: 100)
+    //       → resolve titles/photos → map to [ChatSummary]
+    throw UnimplementedError('TelegramRepository.getChats()');
   }
 }
