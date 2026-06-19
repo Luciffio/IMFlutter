@@ -272,8 +272,8 @@ class _TranscriptState extends State<Transcript> {
     return ListView.separated(
       controller: _scrollCtrl,
       padding: EdgeInsets.only(
-        // Clear the ChatHeader (topPad + 72 dp content + 8 dp gap)
-        top: MediaQuery.of(context).padding.top + 88,
+        // Clear the fixed-height ChatHeader, including two-line chat titles.
+        top: MediaQuery.of(context).padding.top + 142,
         // Extra 80 dp so the last item clears the floating InputBar (~70 dp)
         bottom: 180 + MediaQuery.of(context).padding.bottom,
       ),

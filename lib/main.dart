@@ -84,8 +84,7 @@ class _RootShellState extends State<_RootShell> {
       PageRouteBuilder(
         transitionDuration: Duration.zero,
         reverseTransitionDuration: Duration.zero,
-        pageBuilder: (_, _, _) =>
-            ChatScreen(chat: chat, repository: _chatRepo),
+        pageBuilder: (_, _, _) => ChatScreen(chat: chat, repository: _chatRepo),
       ),
     );
   }
@@ -103,11 +102,7 @@ class ChatScreen extends StatefulWidget {
   final ChatSummary chat;
   final ChatRepository repository;
 
-  const ChatScreen({
-    super.key,
-    required this.chat,
-    required this.repository,
-  });
+  const ChatScreen({super.key, required this.chat, required this.repository});
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -171,14 +166,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             child: ChatHeader(
               chatName: widget.chat.title,
               participants: participants,
+              onBack: () => Navigator.of(context).pop(),
             ),
-          ),
-
-          // Back button — returns to the chat list.
-          Positioned(
-            top: MediaQuery.of(context).padding.top + 8,
-            left: 8,
-            child: _BackButton(onTap: () => Navigator.of(context).pop()),
           ),
 
           Align(
@@ -201,24 +190,5 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       default:
         return null;
     }
-  }
-}
-
-class _BackButton extends StatelessWidget {
-  final VoidCallback onTap;
-  const _BackButton({required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: Container(
-        width: 40,
-        height: 40,
-        alignment: Alignment.center,
-        child: const Icon(Icons.arrow_back, color: Colors.white, size: 28),
-      ),
-    );
   }
 }

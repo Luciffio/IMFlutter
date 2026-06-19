@@ -31,13 +31,8 @@ class ChatListItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final badgeCount = chat.participants.length.clamp(1, 3);
-    final badgeStripW =
-        _badgeSize + (_badgeSize - _badgeOverlap) * (badgeCount - 1);
-
-    // Text column starts ~12 dp past the avatars so it sits comfortably
-    // inside the banner's inner rectangle.
-    final textLeft = badgeStripW + 12;
+    const badgeStripW = _badgeSize;
+    const textLeft = badgeStripW + 12;
 
     return Transform.rotate(
       angle: rotation,
@@ -87,28 +82,13 @@ class ChatListItem extends StatelessWidget {
                 ),
               ),
 
-              // Avatar strip — overlaps the banner on the left.
+              // Telegram exposes one avatar per chat. Group participant
+              // portraits are composed inside this single P5 frame only when
+              // the group itself has no photo.
               Positioned(
                 left: 4,
                 top: 10,
-                child: SizedBox(
-                  width: badgeStripW,
-                  height: _badgeSize,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      for (int i = 0; i < badgeCount; i++)
-                        Positioned(
-                          left: i * (_badgeSize - _badgeOverlap),
-                          top: 0,
-                          child: _AvatarBadge(
-                            participant: chat.participants[i],
-                            size: _badgeSize,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+                child: _ChatAvatarBadge(chat: chat, size: _badgeSize),
               ),
             ],
           ),
@@ -264,49 +244,93 @@ class _DateStamp extends StatelessWidget {
 
 // ── Avatar badge — small skewed black-bordered square with portrait ─────────
 
-class _AvatarBadge extends StatelessWidget {
-  final ChatParticipant participant;
+class _ChatAvatarBadge extends StatelessWidget {
+  final ChatSummary chat;
   final double size;
 
-  const _AvatarBadge({required this.participant, required this.size});
+  const _ChatAvatarBadge({required this.chat, required this.size});
 
   @override
   Widget build(BuildContext context) {
+    final isGroup = chat.participants.length > 1;
+
     return SizedBox(
       width: size,
       height: size,
       child: Stack(
         children: [
-          Positioned.fill(
-            child: CustomPaint(
-              painter: _BadgeBgPainter(color: participant.color),
-            ),
+          const Positioned.fill(
+            child: CustomPaint(painter: _BadgeBgPainter(color: Colors.white)),
           ),
           Positioned.fill(
-            child: ClipPath(clipper: const _BadgeClipper(), child: _portrait()),
+            child: ClipPath(
+              clipper: const _BadgeClipper(),
+              child: isGroup
+                  ? Center(
+                      child: Transform.rotate(
+                        angle: -0.04,
+                        child: Text(
+                          _label(),
+                          maxLines: 1,
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontFamily: 'OptimaNova',
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            height: 1,
+                          ),
+                        ),
+                      ),
+                    )
+                  : _directChatArtwork(),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _portrait() {
-    final asset = participant.portraitAsset;
-    if (asset == null) return const SizedBox.shrink();
-    if (asset.startsWith('assets/')) {
+  Widget _directChatArtwork() {
+    final path =
+        chat.avatarPath ??
+        (chat.participants.isEmpty
+            ? null
+            : chat.participants.first.portraitAsset);
+    if (path == null) return const ColoredBox(color: Colors.white);
+
+    if (path.startsWith('assets/')) {
       return Image.asset(
-        asset,
+        path,
         fit: BoxFit.cover,
         alignment: const Alignment(0, -0.5),
-        errorBuilder: (_, _, _) => const SizedBox.shrink(),
+        errorBuilder: (_, _, _) => const ColoredBox(color: Colors.white),
       );
     }
+
     return Image.file(
-      File(asset),
+      File(path),
       fit: BoxFit.cover,
       alignment: const Alignment(0, -0.5),
-      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      errorBuilder: (_, _, _) => const ColoredBox(color: Colors.white),
     );
+  }
+
+  String _label() {
+    final explicit = chat.avatarLabel?.trim();
+    if (explicit != null && explicit.isNotEmpty) {
+      return explicit.substring(0, explicit.length.clamp(1, 2)).toUpperCase();
+    }
+
+    final words = chat.title
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((word) => word.isNotEmpty)
+        .toList();
+    if (words.isEmpty) return '?';
+    if (words.length == 1) {
+      return words.first.substring(0, 1).toUpperCase();
+    }
+    return '${words.first[0]}${words[1][0]}'.toUpperCase();
   }
 }
 

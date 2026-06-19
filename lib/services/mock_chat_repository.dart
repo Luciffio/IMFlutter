@@ -57,36 +57,42 @@ class MockChatRepository implements ChatRepository {
         title: 'After school',
         updatedAt: DateTime(2016, 4, 19),
         participants: const [ann, ryuji, yusuke],
+        avatarLabel: 'PT',
       ),
       ChatSummary(
         id: 'ann',
         title: 'Calling card?',
         updatedAt: DateTime(2016, 4, 19),
         participants: const [ann],
+        avatarLabel: 'A',
       ),
       ChatSummary(
         id: 'group-today',
         title: 'So tired...',
         updatedAt: DateTime(2016, 4, 18),
         participants: const [ryuji, yusuke],
+        avatarLabel: 'RY',
       ),
       ChatSummary(
         id: 'yusuke',
         title: 'Palace?',
         updatedAt: DateTime(2016, 4, 18),
         participants: const [yusuke],
+        avatarLabel: 'Y',
       ),
       ChatSummary(
         id: 'ryuji',
         title: 'Ran into Kamoshida',
         updatedAt: DateTime(2016, 4, 18),
         participants: const [ryuji],
+        avatarLabel: 'R',
       ),
       ChatSummary(
         id: 'ann-private',
         title: 'I saw Shiho today...',
         updatedAt: DateTime(2016, 4, 17),
         participants: const [ann],
+        avatarLabel: 'A',
       ),
     ];
   }

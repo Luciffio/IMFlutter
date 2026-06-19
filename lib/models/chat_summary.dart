@@ -19,19 +19,23 @@ class ChatParticipant {
   });
 }
 
-/// A row in the chat list.  Mirrors the P5 IM "thread" card: a title plus a
-/// date plus a small avatar strip (1 participant = DM, 2+ = group chat).
+/// A row in the chat list. [avatarLabel] is a compact one- or two-letter
+/// identity derived from the Telegram chat title.
 class ChatSummary {
   /// Stable id — maps to a Telegram chatId once the real backend is wired up.
   final String id;
   final String title;
   final DateTime updatedAt;
   final List<ChatParticipant> participants;
+  final String? avatarPath;
+  final String? avatarLabel;
 
   const ChatSummary({
     required this.id,
     required this.title,
     required this.updatedAt,
     required this.participants,
+    this.avatarPath,
+    this.avatarLabel,
   });
 }
