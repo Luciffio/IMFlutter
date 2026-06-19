@@ -58,6 +58,7 @@ class MockChatRepository implements ChatRepository {
         updatedAt: DateTime(2016, 4, 19),
         participants: const [ann, ryuji, yusuke],
         avatarLabel: 'PT',
+        isPinned: true,
       ),
       ChatSummary(
         id: 'ann',
@@ -65,6 +66,7 @@ class MockChatRepository implements ChatRepository {
         updatedAt: DateTime(2016, 4, 19),
         participants: const [ann],
         avatarLabel: 'A',
+        showActivityBadge: true,
       ),
       ChatSummary(
         id: 'group-today',
@@ -79,6 +81,7 @@ class MockChatRepository implements ChatRepository {
         updatedAt: DateTime(2016, 4, 18),
         participants: const [yusuke],
         avatarLabel: 'Y',
+        showActivityBadge: true,
       ),
       ChatSummary(
         id: 'ryuji',

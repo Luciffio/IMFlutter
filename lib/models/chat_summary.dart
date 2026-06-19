@@ -29,6 +29,8 @@ class ChatSummary {
   final List<ChatParticipant> participants;
   final String? avatarPath;
   final String? avatarLabel;
+  final bool showActivityBadge;
+  final bool isPinned;
 
   const ChatSummary({
     required this.id,
@@ -37,5 +39,7 @@ class ChatSummary {
     required this.participants,
     this.avatarPath,
     this.avatarLabel,
+    this.showActivityBadge = false,
+    this.isPinned = false,
   });
 }

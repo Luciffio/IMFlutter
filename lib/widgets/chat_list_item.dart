@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../models/chat_summary.dart';
@@ -90,6 +91,17 @@ class ChatListItem extends StatelessWidget {
                 top: 10,
                 child: _ChatAvatarBadge(chat: chat, size: _badgeSize),
               ),
+              if (chat.isPinned)
+                Positioned(
+                  left: -8,
+                  top: -4,
+                  child: SvgPicture.asset(
+                    'assets/icons/hold_badge.svg',
+                    width: 68,
+                    height: 34,
+                    fit: BoxFit.contain,
+                  ),
+                ),
             ],
           ),
         ),
@@ -118,7 +130,7 @@ class _BannerPainter extends CustomPainter {
     if (isSelected) {
       canvas.drawPath(
         _selectedShape(w, h),
-        Paint()..color = const Color(0xFFC41001),
+        Paint()..color = const Color(0xFFF70000),
       );
     }
   }
@@ -285,6 +297,8 @@ class _ChatAvatarBadge extends StatelessWidget {
                   : _directChatArtwork(),
             ),
           ),
+          if (chat.showActivityBadge)
+            const Positioned(right: 0, bottom: 0, child: _ActivityBadge()),
         ],
       ),
     );
@@ -334,6 +348,54 @@ class _ChatAvatarBadge extends StatelessWidget {
   }
 }
 
+class _ActivityBadge extends StatelessWidget {
+  const _ActivityBadge();
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox(
+      width: 18,
+      height: 18,
+      child: CustomPaint(painter: _ActivityBadgePainter()),
+    );
+  }
+}
+
+class _ActivityBadgePainter extends CustomPainter {
+  const _ActivityBadgePainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    canvas.drawPath(_octagon(center, 9), Paint()..color = Colors.black);
+    canvas.drawPath(_octagon(center, 6.7), Paint()..color = Colors.white);
+    canvas.drawPath(
+      _octagon(center, 4.7),
+      Paint()..color = const Color(0xFFF70000),
+    );
+  }
+
+  Path _octagon(Offset center, double radius) {
+    final path = Path();
+    for (int index = 0; index < 8; index++) {
+      final angle = -math.pi / 8 + math.pi * 2 * index / 8;
+      final point = Offset(
+        center.dx + math.cos(angle) * radius,
+        center.dy + math.sin(angle) * radius,
+      );
+      if (index == 0) {
+        path.moveTo(point.dx, point.dy);
+      } else {
+        path.lineTo(point.dx, point.dy);
+      }
+    }
+    return path..close();
+  }
+
+  @override
+  bool shouldRepaint(_ActivityBadgePainter oldDelegate) => false;
+}
+
 class _BadgeBgPainter extends CustomPainter {
   final Color color;
   const _BadgeBgPainter({required this.color});
@@ -342,12 +404,6 @@ class _BadgeBgPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-
-    // Shadow
-    canvas.save();
-    canvas.translate(3, 4);
-    canvas.drawPath(_outer(w, h), Paint()..color = Colors.black.withAlpha(90));
-    canvas.restore();
 
     canvas.drawPath(_outer(w, h), Paint()..color = Colors.black);
     canvas.drawPath(_white(w, h), Paint()..color = Colors.white);
