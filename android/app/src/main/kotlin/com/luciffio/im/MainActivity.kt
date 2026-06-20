@@ -1,4 +1,4 @@
-package com.example.im
+package com.luciffio.im
 
 import io.flutter.embedding.android.FlutterActivity
 
