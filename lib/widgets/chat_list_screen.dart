@@ -4,6 +4,7 @@ import '../models/chat_summary.dart';
 import '../services/chat_repository.dart';
 import '../theme/persona_colors.dart';
 import 'chat_list_item.dart';
+import 'chat_sections.dart';
 
 enum _ChatSection { chats, pinned, search, settings, profile }
 
@@ -48,7 +49,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   /// Small deterministic tilt per row so the stack looks hand-pinned.
   double _rotationFor(int index) =>
-      ((index * 5 + 2) % 7 - 3) * 0.008; // ≈ ±1.4°
+      ((index * 5 + 2) % 7 - 3) * 0.008; // Ã¢â€°Ë† Ã‚Â±1.4Ã‚Â°
 
   @override
   Widget build(BuildContext context) {
@@ -109,16 +110,23 @@ class _ChatListScreenState extends State<ChatListScreen> {
           ),
         );
       case _ChatSection.pinned:
-        return const _PlaceholderSection(title: 'PINNED', holdBadge: true);
-      case _ChatSection.search:
-        return const _PlaceholderSection(title: 'SEARCH', icon: Icons.search);
-      case _ChatSection.settings:
-        return const _PlaceholderSection(
-          title: 'SETTINGS',
-          icon: Icons.settings,
+        final chats = _chats;
+        if (chats == null) {
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.white),
+          );
+        }
+        return PinnedSection(
+          chats: chats.where((chat) => chat.isPinned).toList(),
+          selectedChatId: _selectedChatId,
+          onOpenChat: _openChat,
         );
+      case _ChatSection.search:
+        return SearchSection(chats: _chats ?? const [], onOpenChat: _openChat);
+      case _ChatSection.settings:
+        return const SettingsSection();
       case _ChatSection.profile:
-        return const _PlaceholderSection(title: 'PROFILE', icon: Icons.person);
+        return const ProfileSection();
     }
   }
 }
@@ -226,85 +234,6 @@ class _NavigationItem extends StatelessWidget {
   }
 }
 
-class _PlaceholderSection extends StatelessWidget {
-  final String title;
-  final IconData? icon;
-  final bool holdBadge;
-
-  const _PlaceholderSection({
-    required this.title,
-    this.icon,
-    this.holdBadge = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 34, 24, 96),
-      child: Align(
-        alignment: Alignment.topCenter,
-        child: Transform.rotate(
-          angle: -0.045,
-          child: CustomPaint(
-            painter: const _PlaceholderPainter(),
-            child: SizedBox(
-              width: 260,
-              height: 128,
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: 22,
-                    top: 48,
-                    child: Text(
-                      title,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontFamily: 'OptimaNova',
-                        fontSize: 27,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    right: 18,
-                    top: 22,
-                    child: holdBadge
-                        ? SvgPicture.asset(
-                            'assets/icons/hold_badge.svg',
-                            width: 94,
-                            height: 46,
-                            fit: BoxFit.contain,
-                          )
-                        : Icon(icon, color: Colors.white, size: 50),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _PlaceholderPainter extends CustomPainter {
-  const _PlaceholderPainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final path = Path()
-      ..moveTo(8, 16)
-      ..lineTo(size.width, 2)
-      ..lineTo(size.width - 18, size.height)
-      ..lineTo(0, size.height - 12)
-      ..close();
-    canvas.drawPath(path, Paint()..color = Colors.black);
-  }
-
-  @override
-  bool shouldRepaint(_PlaceholderPainter oldDelegate) => false;
-}
-
 class _NavigationBackgroundPainter extends CustomPainter {
   const _NavigationBackgroundPainter();
 
@@ -345,7 +274,7 @@ class _NavigationItemPainter extends CustomPainter {
       oldDelegate.isSelected != isSelected;
 }
 
-// ── "IM" logo ───────────────────────────────────────────────────────────────
+// Ã¢â€â‚¬Ã¢â€â‚¬ "IM" logo Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 
 class _ImLogo extends StatelessWidget {
   const _ImLogo();
