@@ -1,272 +1,309 @@
-import 'dart:math' as math;
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 
-// One continuous Persona 5-styled bar:
-//   black outer parallelogram → white inner → [+] [text field] [face] [▶]
+import 'composer_panel.dart';
+
+typedef SendFileCallback = void Function(String path, String name, int size);
+
 class InputBar extends StatefulWidget {
   final ValueChanged<String>? onSend;
   final ValueChanged<String>? onSendImage;
-  const InputBar({super.key, this.onSend, this.onSendImage});
+  final SendFileCallback? onSendFile;
+  final ValueChanged<String>? onSendSticker;
+  final ValueChanged<String>? onSendGif;
+
+  const InputBar({
+    super.key,
+    this.onSend,
+    this.onSendImage,
+    this.onSendFile,
+    this.onSendSticker,
+    this.onSendGif,
+  });
 
   @override
   State<InputBar> createState() => _InputBarState();
 }
 
 class _InputBarState extends State<InputBar> {
-  final _ctrl = TextEditingController();
-  final _picker = ImagePicker();
+  final _controller = TextEditingController();
+  final _focusNode = FocusNode();
+  final _imagePicker = ImagePicker();
+  ComposerPanelMode _panelMode = ComposerPanelMode.none;
 
   void _send() {
-    final text = _ctrl.text.trim();
+    final text = _controller.text.trim();
     if (text.isEmpty) return;
     widget.onSend?.call(text);
-    _ctrl.clear();
+    _controller.clear();
   }
 
   Future<void> _pickImage() async {
     try {
-      final file = await _picker.pickImage(
+      final file = await _imagePicker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1920,
         maxHeight: 1920,
         imageQuality: 90,
       );
-      if (file != null) {
-        widget.onSendImage?.call(file.path);
-      }
-    } catch (e) {
-      debugPrint('Image picker error: $e');
+      if (file == null) return;
+      widget.onSendImage?.call(file.path);
+      _closePanel();
+    } catch (error) {
+      debugPrint('Image picker error: $error');
     }
+  }
+
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.platform.pickFiles();
+      final file = result?.files.single;
+      final path = file?.path;
+      if (file == null || path == null) return;
+      widget.onSendFile?.call(path, file.name, file.size);
+      _closePanel();
+    } catch (error) {
+      debugPrint('File picker error: $error');
+    }
+  }
+
+  void _togglePanel(ComposerPanelMode mode) {
+    _focusNode.unfocus();
+    setState(() {
+      _panelMode = _panelMode == mode ? ComposerPanelMode.none : mode;
+    });
+  }
+
+  void _closePanel() {
+    if (!mounted || _panelMode == ComposerPanelMode.none) return;
+    setState(() => _panelMode = ComposerPanelMode.none);
+  }
+
+  void _insertEmoji(String emoji) {
+    final selection = _controller.selection;
+    final start = selection.isValid ? selection.start : _controller.text.length;
+    final end = selection.isValid ? selection.end : _controller.text.length;
+    final text = _controller.text.replaceRange(start, end, emoji);
+    _controller.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: start + emoji.length),
+    );
   }
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final bottomPad = MediaQuery.of(context).padding.bottom;
+    final bottomPadding = MediaQuery.paddingOf(context).bottom;
+
     return Padding(
-      padding: EdgeInsets.fromLTRB(8, 0, 8, 10 + bottomPad),
-      child: CustomPaint(
-        painter: const _BarPainter(),
-        child: SizedBox(
-          height: 54,
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(width: 14),
-
-              // Crooked "+" — opens gallery to pick an image
-              GestureDetector(
-                onTap: _pickImage,
-                child: Transform.rotate(
-                  angle: -0.22, // ≈ –12.6° — pleasantly crooked
-                  child: const SizedBox(
-                    width: 26,
-                    height: 26,
-                    child: CustomPaint(painter: _PlusPainter()),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 14),
-
-              // Text field — takes all remaining space
-              Expanded(
-                child: TextField(
-                  controller: _ctrl,
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontSize: 14,
-                    fontFamily: 'OptimaNova',
-                    fontWeight: FontWeight.w900,
-                  ),
-                  decoration: const InputDecoration(
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                    hintText: 'Message...',
-                    hintStyle: TextStyle(
-                      color: Colors.black38,
-                      fontSize: 14,
-                      fontFamily: 'OptimaNova',
-                      fontWeight: FontWeight.w900,
+      padding: EdgeInsets.fromLTRB(8, 0, 8, 10 + bottomPadding),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 140),
+            transitionBuilder: (child, animation) => SizeTransition(
+              sizeFactor: animation,
+              axisAlignment: 1,
+              child: FadeTransition(opacity: animation, child: child),
+            ),
+            child: _panelMode == ComposerPanelMode.none
+                ? const SizedBox.shrink(key: ValueKey('closed'))
+                : Padding(
+                    key: ValueKey(_panelMode),
+                    padding: const EdgeInsets.only(bottom: 7),
+                    child: ComposerPanel(
+                      mode: _panelMode,
+                      onModeChanged: _togglePanel,
+                      onPickPhoto: _pickImage,
+                      onPickFile: _pickFile,
+                      onEmojiSelected: _insertEmoji,
+                      onGifSelected: (path) {
+                        widget.onSendGif?.call(path);
+                        _closePanel();
+                      },
+                      onStickerSelected: (path) {
+                        widget.onSendSticker?.call(path);
+                        _closePanel();
+                      },
                     ),
                   ),
-                  onSubmitted: (_) => _send(),
-                ),
-              ),
-
-              const SizedBox(width: 12),
-
-              // Custom emoji icon
-              GestureDetector(
-                onTap: () {},
-                child: SvgPicture.asset(
-                  'assets/icons/smile.svg',
-                  width: 32,
-                  height: 32,
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
-              // Right-pointing triangle send button
-              GestureDetector(
-                onTap: _send,
-                child: const SizedBox(
-                  width: 30,
-                  height: 30,
-                  child: Padding(
-                    padding: EdgeInsets.all(6),
-                    child: CustomPaint(painter: _TrianglePainter()),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 14),
-            ],
           ),
-        ),
+          CustomPaint(
+            painter: const _BarPainter(),
+            child: SizedBox(
+              height: 54,
+              child: Row(
+                children: [
+                  const SizedBox(width: 14),
+                  Tooltip(
+                    message: 'Attachments',
+                    child: GestureDetector(
+                      onTap: () => _togglePanel(ComposerPanelMode.attachments),
+                      child: Transform.rotate(
+                        angle: _panelMode == ComposerPanelMode.attachments
+                            ? 0
+                            : -0.22,
+                        child: SizedBox(
+                          width: 26,
+                          height: 26,
+                          child: CustomPaint(
+                            painter: _PlusPainter(
+                              isClose:
+                                  _panelMode == ComposerPanelMode.attachments,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      onTap: _closePanel,
+                      style: const TextStyle(
+                        color: Colors.black,
+                        fontSize: 14,
+                        fontFamily: 'OptimaNova',
+                        fontWeight: FontWeight.w900,
+                      ),
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                        hintText: 'Message...',
+                        hintStyle: TextStyle(
+                          color: Colors.black38,
+                          fontSize: 14,
+                          fontFamily: 'OptimaNova',
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      onSubmitted: (_) => _send(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Tooltip(
+                    message: 'Emoji',
+                    child: GestureDetector(
+                      onTap: () => _togglePanel(ComposerPanelMode.emoji),
+                      child: SvgPicture.asset(
+                        'assets/icons/smile.svg',
+                        width: 32,
+                        height: 32,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  GestureDetector(
+                    onTap: _send,
+                    child: const SizedBox(
+                      width: 30,
+                      height: 30,
+                      child: Padding(
+                        padding: EdgeInsets.all(6),
+                        child: CustomPaint(painter: _TrianglePainter()),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 14),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
-
-// ── Single bar background ──────────────────────────────────────────────────
-//
-// Shape: \------|
-//   Left edge  — diagonal \ (top-left pushed right by skew, bottom-left at 0)
-//   Right edge — straight vertical | (same x on top and bottom)
-//   Right side — 10 % narrower: 5 % inset from top, 5 % inset from bottom
 
 class _BarPainter extends CustomPainter {
   const _BarPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    const skew = 8.0;          // how far the top-left corner is pushed right
-    final inset = h * 0.05;   // 5 % trim on each side → 10 % total at right edge
+    final width = size.width;
+    final height = size.height;
+    const skew = 8.0;
+    final inset = height * 0.05;
 
-    // Black outline
-    canvas.drawPath(
-      Path()
-        ..moveTo(0, 0)         // TL — flush left at top   ← \ starts here
-        ..lineTo(w, inset)     // TR — right edge 5 % down
-        ..lineTo(w, h - inset) // BR — right edge 5 % up (vertical |)
-        ..lineTo(skew, h)      // BL — pushed right at bottom  \ ends here
-        ..close(),
-      Paint()..color = Colors.black,
-    );
+    final outer = Path()
+      ..moveTo(0, 0)
+      ..lineTo(width, inset)
+      ..lineTo(width, height - inset)
+      ..lineTo(skew, height)
+      ..close();
+    canvas.drawPath(outer, Paint()..color = Colors.black);
 
-    // White fill (3 px border)
-    const b = 3.0;
-    canvas.drawPath(
-      Path()
-        ..moveTo(b, b)
-        ..lineTo(w - b, inset + b)
-        ..lineTo(w - b, h - inset - b)
-        ..lineTo(skew + b, h - b)
-        ..close(),
-      Paint()..color = Colors.white,
-    );
+    const border = 3.0;
+    final inner = Path()
+      ..moveTo(border, border)
+      ..lineTo(width - border, inset + border)
+      ..lineTo(width - border, height - inset - border)
+      ..lineTo(skew + border, height - border)
+      ..close();
+    canvas.drawPath(inner, Paint()..color = Colors.white);
   }
 
   @override
-  bool shouldRepaint(_BarPainter old) => false;
+  bool shouldRepaint(_BarPainter oldDelegate) => false;
 }
 
-// ── "+" — two stroked lines, drawn with square caps ────────────────────────
-
 class _PlusPainter extends CustomPainter {
-  const _PlusPainter();
+  final bool isClose;
+
+  const _PlusPainter({this.isClose = false});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final p = Paint()
+    final paint = Paint()
       ..color = Colors.black
       ..style = PaintingStyle.stroke
       ..strokeWidth = 5.5
       ..strokeCap = StrokeCap.square;
 
-    canvas.drawLine(Offset(0, h / 2), Offset(w, h / 2), p); // horizontal
-    canvas.drawLine(Offset(w / 2, 0), Offset(w / 2, h), p); // vertical
-  }
-
-  @override
-  bool shouldRepaint(_PlusPainter old) => false;
-}
-
-// ── Stylized smiley face (circle + dot eyes + arc smile) ───────────────────
-
-class _FacePainter extends CustomPainter {
-  const _FacePainter();
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    final cx = w / 2;
-    final cy = h / 2;
-    final r = math.min(w, h) / 2 - 1.5;
-
-    final stroke = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.2
-      ..strokeCap = StrokeCap.round;
-
-    final fill = Paint()..color = Colors.black;
-
-    // Circle
-    canvas.drawCircle(Offset(cx, cy), r, stroke);
-
-    // Eyes — small filled circles
-    final eyeR = r * 0.11;
-    canvas.drawCircle(Offset(cx - r * 0.32, cy - r * 0.18), eyeR, fill);
-    canvas.drawCircle(Offset(cx + r * 0.32, cy - r * 0.18), eyeR, fill);
-
-    // Smile — minimal short arc, just a gentle curve
-    final smileRect = Rect.fromCenter(
-      center: Offset(cx, cy + r * 0.22),
-      width: r * 0.72,
-      height: r * 0.38,
+    canvas.drawLine(
+      Offset(0, size.height / 2),
+      Offset(size.width, size.height / 2),
+      paint,
     );
-    canvas.drawArc(smileRect, 0.1, math.pi - 0.2, false, stroke);
+    if (!isClose) {
+      canvas.drawLine(
+        Offset(size.width / 2, 0),
+        Offset(size.width / 2, size.height),
+        paint,
+      );
+    }
   }
 
   @override
-  bool shouldRepaint(_FacePainter old) => false;
+  bool shouldRepaint(_PlusPainter oldDelegate) =>
+      oldDelegate.isClose != isClose;
 }
-
-// ── Right-pointing filled triangle ─────────────────────────────────────────
 
 class _TrianglePainter extends CustomPainter {
   const _TrianglePainter();
 
   @override
   void paint(Canvas canvas, Size size) {
-    final w = size.width;
-    final h = size.height;
-    canvas.drawPath(
-      Path()
-        ..moveTo(0, 0)
-        ..lineTo(w, h / 2)
-        ..lineTo(0, h)
-        ..close(),
-      Paint()..color = Colors.black,
-    );
+    final path = Path()
+      ..moveTo(0, 0)
+      ..lineTo(size.width, size.height / 2)
+      ..lineTo(0, size.height)
+      ..close();
+    canvas.drawPath(path, Paint()..color = Colors.black);
   }
 
   @override
-  bool shouldRepaint(_TrianglePainter old) => false;
+  bool shouldRepaint(_TrianglePainter oldDelegate) => false;
 }

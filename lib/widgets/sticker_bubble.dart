@@ -32,12 +32,33 @@ class StickerBubble extends StatelessWidget {
     this.alpha = 1.0,
   });
 
-  bool get _isLottie => message.stickerPath!.endsWith('.tgs');
-  bool get _isVideo => message.stickerPath!.endsWith('.webm');
+  String get _path => message.animatedMediaPath!;
+  bool get _isLottie => _path.endsWith('.tgs');
+  bool get _isVideo => _path.endsWith('.webm');
 
   @override
   Widget build(BuildContext context) {
     const totalHeight = _kSize > kAvatarHeight ? _kSize : kAvatarHeight + 0.0;
+
+    if (message.sender == Sender.ren) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18),
+        child: SizedBox(
+          height: totalHeight,
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: Transform.scale(
+              scale: scale,
+              alignment: Alignment.centerRight,
+              child: Opacity(
+                opacity: alpha.clamp(0.0, 1.0),
+                child: SizedBox(width: _kSize, height: _kSize, child: _media()),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -66,18 +87,7 @@ class StickerBubble extends StatelessWidget {
                   child: SizedBox(
                     width: _kSize,
                     height: _kSize,
-                    child: _isLottie
-                        ? _TgsSticker(path: message.stickerPath!, size: _kSize)
-                        : _isVideo
-                            ? _WebmSticker(path: message.stickerPath!, size: _kSize)
-                            : Image.asset(
-                                message.stickerPath!,
-                                width: _kSize,
-                                height: _kSize,
-                                fit: BoxFit.contain,
-                                errorBuilder: (_, __, ___) =>
-                                    const SizedBox.shrink(),
-                              ),
+                    child: _media(),
                   ),
                 ),
               ),
@@ -85,6 +95,18 @@ class StickerBubble extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  Widget _media() {
+    if (_isLottie) return _TgsSticker(path: _path, size: _kSize);
+    if (_isVideo) return _WebmSticker(path: _path, size: _kSize);
+    return Image.asset(
+      _path,
+      width: _kSize,
+      height: _kSize,
+      fit: BoxFit.contain,
+      errorBuilder: (_, _, _) => const SizedBox.shrink(),
     );
   }
 }

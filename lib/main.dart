@@ -140,6 +140,25 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _transcriptState.addMessage(Message(sender: Sender.ren, imagePath: path));
   }
 
+  void _onSendFile(String path, String name, int size) {
+    _transcriptState.addMessage(
+      Message(
+        sender: Sender.ren,
+        filePath: path,
+        fileName: name,
+        fileSize: size,
+      ),
+    );
+  }
+
+  void _onSendSticker(String path) {
+    _transcriptState.addMessage(Message(sender: Sender.ren, stickerPath: path));
+  }
+
+  void _onSendGif(String path) {
+    _transcriptState.addMessage(Message(sender: Sender.ren, gifPath: path));
+  }
+
   @override
   Widget build(BuildContext context) {
     // Best-effort mapping from the chat's participants back to the hardcoded
@@ -172,7 +191,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
           Align(
             alignment: Alignment.bottomCenter,
-            child: InputBar(onSend: _onSend, onSendImage: _onSendImage),
+            child: InputBar(
+              onSend: _onSend,
+              onSendImage: _onSendImage,
+              onSendFile: _onSendFile,
+              onSendSticker: _onSendSticker,
+              onSendGif: _onSendGif,
+            ),
           ),
         ],
       ),

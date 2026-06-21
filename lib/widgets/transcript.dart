@@ -4,6 +4,7 @@ import '../models/message.dart';
 import '../theme/persona_colors.dart';
 import 'connecting_line.dart';
 import 'entry_bubble.dart';
+import 'file_bubble.dart';
 import 'image_bubble.dart';
 import 'reply_bubble.dart';
 import 'sticker_bubble.dart';
@@ -80,7 +81,7 @@ class TranscriptState extends ChangeNotifier {
   int _messageIndex = 0;
 
   TranscriptState({required this.vsync, required List<Message> messages})
-      : _messages = messages;
+    : _messages = messages;
 
   // ── Public API ────────────────────────────────────────────────────────────
 
@@ -136,14 +137,18 @@ class TranscriptState extends ChangeNotifier {
     // ── Animations ──────────────────────────────────────────────────────
 
     state.avatarBgCtrl = AnimationController(
-        vsync: vsync, duration: const Duration(milliseconds: 300));
+      vsync: vsync,
+      duration: const Duration(milliseconds: 300),
+    );
     state.avatarBgScale = Tween<double>(begin: 0.6, end: 1.0).animate(
       CurvedAnimation(parent: state.avatarBgCtrl, curve: Curves.easeOutBack),
     );
     state.avatarBgCtrl.forward();
 
     state.avatarFgCtrl = AnimationController(
-        vsync: vsync, duration: const Duration(milliseconds: 150));
+      vsync: vsync,
+      duration: const Duration(milliseconds: 150),
+    );
     state.avatarFgScale = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: state.avatarFgCtrl, curve: Curves.easeOutBack),
     );
@@ -152,31 +157,43 @@ class TranscriptState extends ChangeNotifier {
     });
 
     state.msgHCtrl = AnimationController(
-        vsync: vsync, duration: const Duration(milliseconds: 180));
+      vsync: vsync,
+      duration: const Duration(milliseconds: 180),
+    );
     state.msgHScale = Tween<double>(begin: 0.3, end: 1.0).animate(
       CurvedAnimation(parent: state.msgHCtrl, curve: Curves.easeOutBack),
     );
     state.msgHCtrl.forward();
 
     state.msgVCtrl = AnimationController(
-        vsync: vsync, duration: const Duration(milliseconds: 180));
+      vsync: vsync,
+      duration: const Duration(milliseconds: 180),
+    );
     state.msgVScale = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: state.msgVCtrl, curve: Curves.easeOutBack),
     );
     state.msgVCtrl.forward();
 
     state.msgAlphaCtrl = AnimationController(
-        vsync: vsync, duration: const Duration(milliseconds: 130));
-    state.msgAlpha =
-        Tween<double>(begin: 0.0, end: 1.0).animate(state.msgAlphaCtrl);
+      vsync: vsync,
+      duration: const Duration(milliseconds: 130),
+    );
+    state.msgAlpha = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(state.msgAlphaCtrl);
     Future.delayed(const Duration(milliseconds: 100), () {
       if (!state.disposed) state.msgAlphaCtrl.forward();
     });
 
     state.lineCtrl = AnimationController(
-        vsync: vsync, duration: const Duration(milliseconds: 180));
-    state.lineProgress =
-        Tween<double>(begin: 0.0, end: 1.0).animate(state.lineCtrl);
+      vsync: vsync,
+      duration: const Duration(milliseconds: 180),
+    );
+    state.lineProgress = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(state.lineCtrl);
 
     // ── Finalize PREVIOUS entry ──────────────────────────────────────────
     // Tiny random jitter (±8 dp) for visual variety without forced zigzag.
@@ -184,8 +201,18 @@ class TranscriptState extends ChangeNotifier {
     // shifts on `state` can't move the already-drawn line.
     if (_entries.isNotEmpty) {
       final prev = _entries.last;
+      final skipsOutgoingMedia =
+          (prev.message.sender == Sender.ren && prev.message.isAnimatedMedia) ||
+          (state.message.sender == Sender.ren && state.message.isAnimatedMedia);
+      if (skipsOutgoingMedia) {
+        _entries.add(state);
+        notifyListeners();
+        return;
+      }
       // Skip jitter for image messages — their line is anchored at a fixed center
-      if (prev.message.sender != Sender.ren && !prev.message.isImage && !prev.message.isSticker) {
+      if (prev.message.sender != Sender.ren &&
+          !prev.message.isImage &&
+          !prev.message.isAnimatedMedia) {
         final shift = (_rng.nextDouble() * 16) - 8; // –8 … +8 dp
         prev.lineLeft = prev.lineLeft + Offset(shift, 0);
         prev.lineRight = prev.lineRight + Offset(shift, 0);
@@ -193,11 +220,11 @@ class TranscriptState extends ChangeNotifier {
       prev.frozenBottomLeft = state.lineLeft;
       prev.frozenBottomRight = state.lineRight;
       prev.frozenNextIsRen = state.message.sender == Sender.ren;
-      prev.frozenNextIsSticker = state.message.isSticker;
+      prev.frozenNextIsSticker = state.message.isAnimatedMedia;
 
       // Random line shape: Z-jog only on cross-sender connections.
       // The jog goes AGAINST the direction of travel to form a proper Z-shape.
-      if (!prev.message.isSticker && !state.message.isSticker) {
+      if (!prev.message.isAnimatedMedia && !state.message.isAnimatedMedia) {
         final crossSender = prev.message.sender != state.message.sender;
         if (crossSender && _rng.nextDouble() < 0.55) {
           prev.lineStyle = LineStyle.zJog;
@@ -312,7 +339,14 @@ class _TranscriptState extends State<Transcript> {
         vScale: entry.msgVScale.value,
         alpha: entry.msgAlpha.value,
       );
-    } else if (entry.message.isSticker) {
+    } else if (entry.message.isFile) {
+      item = FileBubble(
+        message: entry.message,
+        hScale: entry.msgHScale.value,
+        vScale: entry.msgVScale.value,
+        alpha: entry.msgAlpha.value,
+      );
+    } else if (entry.message.isAnimatedMedia) {
       item = StickerBubble(
         message: entry.message,
         avatarBackgroundScale: entry.avatarBgScale.value,
@@ -345,7 +379,7 @@ class _TranscriptState extends State<Transcript> {
     return CustomPaint(
       painter: ConnectingLinePainter(
         currentIsRen: entry.message.sender == Sender.ren,
-        currentIsSticker: entry.message.isSticker,
+        currentIsSticker: entry.message.isAnimatedMedia,
         currentLineLeft: entry.lineLeft,
         currentLineRight: entry.lineRight,
         nextIsRen: entry.frozenNextIsRen,

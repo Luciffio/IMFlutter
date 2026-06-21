@@ -40,26 +40,40 @@ class Message {
   final String text;
   final String? imagePath;
   final String? stickerPath;
+  final String? gifPath;
+  final String? filePath;
+  final String? fileName;
+  final int? fileSize;
 
   const Message({
     required this.sender,
     this.text = '',
     this.imagePath,
     this.stickerPath,
+    this.gifPath,
+    this.filePath,
+    this.fileName,
+    this.fileSize,
   });
 
   bool get isImage => imagePath != null;
   bool get isSticker => stickerPath != null;
+  bool get isGif => gifPath != null;
+  bool get isFile => filePath != null;
+  bool get isAnimatedMedia => isSticker || isGif;
+  String? get animatedMediaPath => gifPath ?? stickerPath;
 }
 
 final List<Message> kMessages = [
   const Message(
     sender: Sender.ann,
-    text: 'We have to find them tomorrow for sure. This is the only lead we have right now.',
+    text:
+        'We have to find them tomorrow for sure. This is the only lead we have right now.',
   ),
   const Message(
     sender: Sender.yusuke,
-    text: 'Yes. It is highly likely that this part-time solicitor is somehow related to the mafia.',
+    text:
+        'Yes. It is highly likely that this part-time solicitor is somehow related to the mafia.',
   ),
   const Message(
     sender: Sender.yusuke,
@@ -71,19 +85,19 @@ final List<Message> kMessages = [
   ),
   const Message(
     sender: Sender.yusuke,
-    text: 'Indeed, it seems that is where our target waits. But then... who should be the one to go?',
+    text:
+        'Indeed, it seems that is where our target waits. But then... who should be the one to go?',
   ),
-  const Message(
-    sender: Sender.ren,
-    text: 'Morgana, I choose you.',
-  ),
+  const Message(sender: Sender.ren, text: 'Morgana, I choose you.'),
   const Message(
     sender: Sender.ann,
-    text: "That's not a bad idea. Cats have nine lives, right? Morgana can spare one for this.",
+    text:
+        "That's not a bad idea. Cats have nine lives, right? Morgana can spare one for this.",
   ),
   const Message(
     sender: Sender.ryuji,
-    text: "Wouldn't the mafia get caught off guard if they had a cat coming to deliver for 'em?",
+    text:
+        "Wouldn't the mafia get caught off guard if they had a cat coming to deliver for 'em?",
   ),
   const Message(
     sender: Sender.yusuke,
@@ -91,24 +105,24 @@ final List<Message> kMessages = [
   ),
   const Message(
     sender: Sender.yusuke,
-    text: 'Tricking people and using that as blackmail… These bastards are true cowards.',
+    text:
+        'Tricking people and using that as blackmail… These bastards are true cowards.',
   ),
   const Message(
     sender: Sender.ann,
-    text: "It's kinda scary to think people like that are all around us in this city...",
+    text:
+        "It's kinda scary to think people like that are all around us in this city...",
   ),
   const Message(
     sender: Sender.ryuji,
-    text: "Well guys, we gotta brace ourselves. We're up against a serious criminal here.",
+    text:
+        "Well guys, we gotta brace ourselves. We're up against a serious criminal here.",
   ),
   const Message(
     sender: Sender.ann,
     text: "Here's our commemorative photo from the summer festival!",
   ),
-  const Message(
-    sender: Sender.ann,
-    imagePath: 'assets/images/template.jpg',
-  ),
+  const Message(sender: Sender.ann, imagePath: 'assets/images/template.jpg'),
   const Message(
     sender: Sender.ryuji,
     stickerPath: 'assets/stickers/sticker.webp',
