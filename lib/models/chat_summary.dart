@@ -31,6 +31,7 @@ class ChatSummary {
   final String? avatarLabel;
   final bool showActivityBadge;
   final bool isPinned;
+  final int unreadCount;
 
   const ChatSummary({
     required this.id,
@@ -41,5 +42,8 @@ class ChatSummary {
     this.avatarLabel,
     this.showActivityBadge = false,
     this.isPinned = false,
+    this.unreadCount = 0,
   });
+
+  bool get isUnread => unreadCount > 0;
 }

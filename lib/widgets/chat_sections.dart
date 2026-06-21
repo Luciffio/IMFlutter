@@ -31,9 +31,8 @@ class PinnedSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 96),
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
       children: [
-        const _SectionTitle(title: 'ON HOLD', subtitle: 'PINNED CHATS'),
         if (chats.isEmpty)
           const _EmptyPanel(
             icon: Icons.push_pin,
@@ -155,9 +154,8 @@ class _SearchSectionState extends State<SearchSection> {
 
     return ListView(
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 100),
       children: [
-        const _SectionTitle(title: 'FIND ANYONE', subtitle: 'GLOBAL SEARCH'),
         Transform.rotate(
           angle: -0.012,
           child: CustomPaint(
@@ -293,75 +291,12 @@ class _SearchResultTile extends StatelessWidget {
   }
 }
 
-class SettingsSection extends StatefulWidget {
+class SettingsSection extends StatelessWidget {
   const SettingsSection({super.key});
 
   @override
-  State<SettingsSection> createState() => _SettingsSectionState();
-}
-
-class _SettingsSectionState extends State<SettingsSection> {
-  bool notifications = true;
-  bool previews = true;
-  bool animations = true;
-
-  @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 104),
-      children: [
-        const _SectionTitle(title: 'CONFIG', subtitle: 'MAKE IT YOURS'),
-        _SettingsGroup(
-          title: 'NOTIFICATIONS',
-          children: [
-            _SettingsToggle(
-              icon: Icons.notifications,
-              title: 'MESSAGES',
-              subtitle: 'Alerts for new messages',
-              value: notifications,
-              onChanged: (value) => setState(() => notifications = value),
-            ),
-            _SettingsToggle(
-              icon: Icons.visibility,
-              title: 'PREVIEW TEXT',
-              subtitle: 'Show message in notifications',
-              value: previews,
-              onChanged: (value) => setState(() => previews = value),
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        _SettingsGroup(
-          title: 'APPEARANCE',
-          children: [
-            _SettingsToggle(
-              icon: Icons.bolt,
-              title: 'ANIMATIONS',
-              subtitle: 'Transitions and visual effects',
-              value: animations,
-              onChanged: (value) => setState(() => animations = value),
-            ),
-            const _SettingsAction(
-              icon: Icons.palette,
-              title: 'ACCENT COLOR',
-              value: 'PHANTOM RED',
-            ),
-          ],
-        ),
-        const SizedBox(height: 14),
-        const _SettingsGroup(
-          title: 'ACCOUNT',
-          children: [
-            _SettingsAction(icon: Icons.lock, title: 'PRIVACY', value: 'OPEN'),
-            _SettingsAction(
-              icon: Icons.storage,
-              title: 'DATA & STORAGE',
-              value: '1.2 GB',
-            ),
-          ],
-        ),
-      ],
-    );
+    return const _WipPanel();
   }
 }
 
@@ -370,139 +305,37 @@ class ProfileSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 104),
-      children: [
-        const _SectionTitle(title: 'YOUR CARD', subtitle: 'TELEGRAM PROFILE'),
-        Transform.rotate(
-          angle: -0.014,
-          child: CustomPaint(
-            painter: const _OutlinedPanelPainter(),
-            child: SizedBox(
-              height: 184,
-              child: Stack(
-                children: [
-                  Positioned(
-                    left: 18,
-                    top: 28,
-                    child: Transform.rotate(
-                      angle: -0.06,
-                      child: CustomPaint(
-                        painter: const _AvatarFramePainter(),
-                        child: SizedBox(
-                          width: 100,
-                          height: 112,
-                          child: Padding(
-                            padding: const EdgeInsets.all(10),
-                            child: Image.asset(
-                              'assets/portraits/yusuke.png',
-                              fit: BoxFit.cover,
-                              alignment: Alignment.topCenter,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    left: 132,
-                    right: 18,
-                    top: 34,
-                    child: Text(
-                      'JOKER',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _titleStyle.copyWith(fontSize: 30),
-                    ),
-                  ),
-                  const Positioned(
-                    left: 134,
-                    top: 78,
-                    child: Text('@luciffio', style: _metaStyle),
-                  ),
-                  const Positioned(left: 134, top: 105, child: _OnlineLabel()),
-                  Positioned(
-                    left: 134,
-                    right: 20,
-                    bottom: 20,
-                    child: Text(
-                      'TAKE YOUR TIME',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: _titleStyle.copyWith(fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-        const Row(
-          children: [
-            Expanded(
-              child: _ProfileStat(value: '42', label: 'CHATS'),
-            ),
-            SizedBox(width: 10),
-            Expanded(
-              child: _ProfileStat(value: '8', label: 'ON HOLD'),
-            ),
-            SizedBox(width: 10),
-            Expanded(
-              child: _ProfileStat(value: '12', label: 'MEDIA'),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        const _ProfileAction(icon: Icons.edit, label: 'EDIT PROFILE'),
-        const SizedBox(height: 10),
-        const _ProfileAction(icon: Icons.qr_code, label: 'MY QR CODE'),
-      ],
-    );
+    return const _WipPanel();
   }
 }
 
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  final String subtitle;
-
-  const _SectionTitle({required this.title, required this.subtitle});
+class _WipPanel extends StatelessWidget {
+  const _WipPanel();
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      height: 68,
-      child: Stack(
-        children: [
-          Positioned(
-            left: 4,
-            child: Transform.rotate(
-              angle: -0.035,
+    return Center(
+      child: Transform.rotate(
+        angle: -0.055,
+        child: CustomPaint(
+          painter: const _WipPainter(),
+          child: const SizedBox(
+            width: 210,
+            height: 112,
+            child: Center(
               child: Text(
-                title,
-                style: _titleStyle.copyWith(
-                  fontSize: 31,
+                'WIP',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontFamily: 'OptimaNova',
+                  fontSize: 54,
+                  fontWeight: FontWeight.w900,
                   height: 1,
-                  shadows: const [
-                    Shadow(color: Colors.black, offset: Offset(3, 3)),
-                  ],
                 ),
               ),
             ),
           ),
-          Positioned(
-            left: 18,
-            top: 36,
-            child: Container(
-              color: Colors.black,
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
-              child: Text(
-                subtitle,
-                style: _metaStyle.copyWith(color: Colors.white),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -549,183 +382,6 @@ class _InitialBadge extends StatelessWidget {
                 .toUpperCase(),
             style: _titleStyle.copyWith(color: Colors.black, fontSize: 17),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsGroup extends StatelessWidget {
-  final String title;
-  final List<Widget> children;
-
-  const _SettingsGroup({required this.title, required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: const _BlackPanelPainter(),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(title, style: _metaStyle.copyWith(color: _red, fontSize: 13)),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _SettingsToggle extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String subtitle;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  const _SettingsToggle({
-    required this.icon,
-    required this.title,
-    required this.subtitle,
-    required this.value,
-    required this.onChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 62,
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.white, size: 24),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: _titleStyle),
-                Text(subtitle, style: _metaStyle),
-              ],
-            ),
-          ),
-          GestureDetector(
-            onTap: () => onChanged(!value),
-            child: CustomPaint(
-              painter: _SwitchPainter(value: value),
-              child: const SizedBox(width: 48, height: 28),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SettingsAction extends StatelessWidget {
-  final IconData icon;
-  final String title;
-  final String value;
-
-  const _SettingsAction({
-    required this.icon,
-    required this.title,
-    required this.value,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 58,
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.white, size: 24),
-          const SizedBox(width: 12),
-          Expanded(child: Text(title, style: _titleStyle)),
-          Text(value, style: _metaStyle),
-          const Icon(Icons.chevron_right, color: Colors.white, size: 24),
-        ],
-      ),
-    );
-  }
-}
-
-class _OnlineLabel extends StatelessWidget {
-  const _OnlineLabel();
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 14,
-          height: 14,
-          decoration: BoxDecoration(
-            color: _red,
-            shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 3),
-          ),
-        ),
-        const SizedBox(width: 7),
-        Text(
-          'ONLINE',
-          style: _metaStyle.copyWith(color: Colors.white, fontSize: 12),
-        ),
-      ],
-    );
-  }
-}
-
-class _ProfileStat extends StatelessWidget {
-  final String value;
-  final String label;
-
-  const _ProfileStat({required this.value, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: const _BlackPanelPainter(),
-      child: SizedBox(
-        height: 72,
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(value, style: _titleStyle.copyWith(fontSize: 25, height: 1)),
-            Text(label, style: _metaStyle),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _ProfileAction extends StatelessWidget {
-  final IconData icon;
-  final String label;
-
-  const _ProfileAction({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomPaint(
-      painter: const _WhitePanelPainter(),
-      child: SizedBox(
-        height: 54,
-        child: Row(
-          children: [
-            const SizedBox(width: 18),
-            Icon(icon, color: Colors.black, size: 23),
-            const SizedBox(width: 12),
-            Text(label, style: _titleStyle.copyWith(color: Colors.black)),
-            const Spacer(),
-            const Icon(Icons.chevron_right, color: Colors.black, size: 25),
-            const SizedBox(width: 18),
-          ],
         ),
       ),
     );
@@ -787,15 +443,6 @@ class _BlackPanelPainter extends CustomPainter {
   bool shouldRepaint(_BlackPanelPainter oldDelegate) => false;
 }
 
-class _WhitePanelPainter extends CustomPainter {
-  const _WhitePanelPainter();
-  @override
-  void paint(Canvas canvas, Size size) =>
-      canvas.drawPath(_panelPath(size), Paint()..color = Colors.white);
-  @override
-  bool shouldRepaint(_WhitePanelPainter oldDelegate) => false;
-}
-
 class _OutlinedPanelPainter extends CustomPainter {
   const _OutlinedPanelPainter();
   @override
@@ -820,36 +467,15 @@ class _BadgePainter extends CustomPainter {
   bool shouldRepaint(_BadgePainter oldDelegate) => false;
 }
 
-class _AvatarFramePainter extends CustomPainter {
-  const _AvatarFramePainter();
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.drawPath(_panelPath(size), Paint()..color = _red);
-    canvas.drawPath(_panelPath(size, inset: 6), Paint()..color = Colors.white);
-  }
-
-  @override
-  bool shouldRepaint(_AvatarFramePainter oldDelegate) => false;
-}
-
-class _SwitchPainter extends CustomPainter {
-  final bool value;
-  const _SwitchPainter({required this.value});
+class _WipPainter extends CustomPainter {
+  const _WipPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
     canvas.drawPath(_panelPath(size), Paint()..color = Colors.white);
-    canvas.drawPath(
-      _panelPath(size, inset: 4),
-      Paint()..color = value ? _red : Colors.black54,
-    );
-    canvas.drawCircle(
-      Offset(value ? size.width - 13 : 13, size.height / 2),
-      7,
-      Paint()..color = Colors.black,
-    );
+    canvas.drawPath(_panelPath(size, inset: 6), Paint()..color = Colors.black);
   }
 
   @override
-  bool shouldRepaint(_SwitchPainter oldDelegate) => oldDelegate.value != value;
+  bool shouldRepaint(_WipPainter oldDelegate) => false;
 }

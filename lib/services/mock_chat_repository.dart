@@ -59,6 +59,7 @@ class MockChatRepository implements ChatRepository {
         participants: const [ann, ryuji, yusuke],
         avatarLabel: 'PT',
         isPinned: true,
+        unreadCount: 3,
       ),
       ChatSummary(
         id: 'ann',

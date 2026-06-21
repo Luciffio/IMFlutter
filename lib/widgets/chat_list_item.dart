@@ -91,7 +91,7 @@ class ChatListItem extends StatelessWidget {
                 top: 10,
                 child: _ChatAvatarBadge(chat: chat, size: _badgeSize),
               ),
-              if (chat.isPinned)
+              if (chat.isUnread)
                 Positioned(
                   left: -8,
                   top: -4,

@@ -1,11 +1,11 @@
 {
-    "name": "im",
-    "short_name": "im",
+    "name": "IM",
+    "short_name": "IM",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#C41001",
+    "theme_color": "#C41001",
+    "description": "Persona-inspired Telegram client.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
