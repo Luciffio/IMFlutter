@@ -177,6 +177,13 @@ class _DateStamp extends StatelessWidget {
     final monthStr = date.month.toString();
     final dayStr = date.day.toString();
     final weekStr = _days[(date.weekday - 1) % 7];
+    final dateAsset = switch (date.weekday) {
+      DateTime.saturday => 'assets/icons/date_blue.svg',
+      DateTime.sunday => 'assets/icons/date_red.svg',
+      _ => 'assets/icons/date_stamp.svg',
+    };
+    final isWeekend =
+        date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
 
     return SizedBox(
       width: _dsW,
@@ -184,12 +191,7 @@ class _DateStamp extends StatelessWidget {
       child: Stack(
         children: [
           // Background — white fill + red "/" stripe + black border.
-          Positioned.fill(
-            child: SvgPicture.asset(
-              'assets/icons/date_stamp.svg',
-              fit: BoxFit.fill,
-            ),
-          ),
+          Positioned.fill(child: SvgPicture.asset(dateAsset, fit: BoxFit.fill)),
 
           // ── Month — small red number ──────────────────────────────────
           Positioned(
@@ -233,15 +235,15 @@ class _DateStamp extends StatelessWidget {
 
           // ── Weekday — black italic, leans right ───────────────────────
           Positioned(
-            left: 59,
+            left: isWeekend ? 61 : 59,
             top: 4,
             width: 22,
             height: 18,
             child: Center(
               child: Text(
                 weekStr,
-                style: const TextStyle(
-                  color: Colors.black,
+                style: TextStyle(
+                  color: isWeekend ? Colors.white : Colors.black,
                   fontSize: 12,
                   fontFamily: 'OptimaNova',
                   fontWeight: FontWeight.w900,

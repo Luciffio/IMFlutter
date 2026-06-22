@@ -4,6 +4,7 @@ import 'package:flutter/rendering.dart';
 import '../models/message.dart';
 import '../theme/persona_colors.dart';
 import 'persona_avatar.dart';
+import 'punctuation_badge.dart';
 
 // Mirrors Entry.kt — received message with avatar on the left.
 class EntryBubble extends StatelessWidget {
@@ -28,18 +29,28 @@ class EntryBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: _EntryLayoutBox(
-        avatar: PersonaAvatar(
-          sender: message.sender,
-          backgroundScale: avatarBackgroundScale,
-          foregroundScale: avatarForegroundScale,
-        ),
-        textBox: _EntryTextBox(
-          text: message.text,
-          messageHorizontalScale: messageHorizontalScale,
-          messageVerticalScale: messageVerticalScale,
-          messageTextAlpha: messageTextAlpha,
-        ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          _EntryLayoutBox(
+            avatar: PersonaAvatar(
+              sender: message.sender,
+              backgroundScale: avatarBackgroundScale,
+              foregroundScale: avatarForegroundScale,
+            ),
+            textBox: _EntryTextBox(
+              text: message.text,
+              messageHorizontalScale: messageHorizontalScale,
+              messageVerticalScale: messageVerticalScale,
+              messageTextAlpha: messageTextAlpha,
+            ),
+          ),
+          Positioned(
+            right: 4,
+            top: -13,
+            child: PunctuationBadge(text: message.text),
+          ),
+        ],
       ),
     );
   }
