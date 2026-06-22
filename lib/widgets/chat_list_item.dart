@@ -16,6 +16,7 @@ class ChatListItem extends StatelessWidget {
   final ChatSummary chat;
   final double rotation;
   final bool isSelected;
+  final bool showHoldBadge;
   final VoidCallback onTap;
 
   const ChatListItem({
@@ -23,6 +24,7 @@ class ChatListItem extends StatelessWidget {
     required this.chat,
     required this.rotation,
     required this.isSelected,
+    this.showHoldBadge = true,
     required this.onTap,
   });
 
@@ -91,7 +93,7 @@ class ChatListItem extends StatelessWidget {
                 top: 10,
                 child: _ChatAvatarBadge(chat: chat, size: _badgeSize),
               ),
-              if (chat.isUnread)
+              if (showHoldBadge && chat.isUnread)
                 Positioned(
                   left: -8,
                   top: -4,
@@ -297,8 +299,12 @@ class _ChatAvatarBadge extends StatelessWidget {
                   : _directChatArtwork(),
             ),
           ),
-          if (chat.showActivityBadge)
-            const Positioned(right: 0, bottom: 0, child: _ActivityBadge()),
+          if (chat.isActive)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: _ActivityBadge(activity: chat.activity),
+            ),
         ],
       ),
     );
@@ -310,14 +316,14 @@ class _ChatAvatarBadge extends StatelessWidget {
         (chat.participants.isEmpty
             ? null
             : chat.participants.first.portraitAsset);
-    if (path == null) return const ColoredBox(color: Colors.white);
+    if (path == null) return _fallbackArtwork();
 
     if (path.startsWith('assets/')) {
       return Image.asset(
         path,
         fit: BoxFit.cover,
         alignment: const Alignment(0, -0.5),
-        errorBuilder: (_, _, _) => const ColoredBox(color: Colors.white),
+        errorBuilder: (_, _, _) => _fallbackArtwork(),
       );
     }
 
@@ -325,7 +331,24 @@ class _ChatAvatarBadge extends StatelessWidget {
       File(path),
       fit: BoxFit.cover,
       alignment: const Alignment(0, -0.5),
-      errorBuilder: (_, _, _) => const ColoredBox(color: Colors.white),
+      errorBuilder: (_, _, _) => _fallbackArtwork(),
+    );
+  }
+
+  Widget _fallbackArtwork() {
+    return ColoredBox(
+      color: Colors.white,
+      child: Center(
+        child: Text(
+          _label(),
+          style: const TextStyle(
+            color: Colors.black,
+            fontFamily: 'OptimaNova',
+            fontSize: 22,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
     );
   }
 
@@ -349,20 +372,24 @@ class _ChatAvatarBadge extends StatelessWidget {
 }
 
 class _ActivityBadge extends StatelessWidget {
-  const _ActivityBadge();
+  final ChatActivity activity;
+
+  const _ActivityBadge({required this.activity});
 
   @override
   Widget build(BuildContext context) {
-    return const SizedBox(
+    return SizedBox(
       width: 18,
       height: 18,
-      child: CustomPaint(painter: _ActivityBadgePainter()),
+      child: CustomPaint(painter: _ActivityBadgePainter(activity: activity)),
     );
   }
 }
 
 class _ActivityBadgePainter extends CustomPainter {
-  const _ActivityBadgePainter();
+  final ChatActivity activity;
+
+  const _ActivityBadgePainter({required this.activity});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -373,6 +400,15 @@ class _ActivityBadgePainter extends CustomPainter {
       _octagon(center, 4.7),
       Paint()..color = const Color(0xFFF70000),
     );
+    if (activity == ChatActivity.typing) {
+      for (var index = 0; index < 3; index++) {
+        canvas.drawCircle(
+          Offset(6 + index * 3, 9),
+          0.8,
+          Paint()..color = Colors.white,
+        );
+      }
+    }
   }
 
   Path _octagon(Offset center, double radius) {
@@ -393,7 +429,8 @@ class _ActivityBadgePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ActivityBadgePainter oldDelegate) => false;
+  bool shouldRepaint(_ActivityBadgePainter oldDelegate) =>
+      oldDelegate.activity != activity;
 }
 
 class _BadgeBgPainter extends CustomPainter {

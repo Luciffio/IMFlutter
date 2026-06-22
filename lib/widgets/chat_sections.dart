@@ -47,6 +47,7 @@ class PinnedSection extends StatelessWidget {
                 chat: chats[index],
                 rotation: ((index * 5 + 2) % 7 - 3) * 0.008,
                 isSelected: chats[index].id == selectedChatId,
+                showHoldBadge: false,
                 onTap: () => onOpenChat(chats[index]),
               ),
             ),

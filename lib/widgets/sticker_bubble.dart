@@ -106,9 +106,60 @@ class StickerBubble extends StatelessWidget {
       width: _kSize,
       height: _kSize,
       fit: BoxFit.contain,
-      errorBuilder: (_, _, _) => const SizedBox.shrink(),
+      errorBuilder: (_, _, _) => const _StickerPlaceholder(),
     );
   }
+}
+
+class _StickerPlaceholder extends StatelessWidget {
+  const _StickerPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.rotate(
+      angle: -0.04,
+      child: CustomPaint(
+        painter: const _StickerPlaceholderPainter(),
+        child: const Center(
+          child: Text(
+            'STICKER',
+            style: TextStyle(
+              color: Colors.white,
+              fontFamily: 'OptimaNova',
+              fontSize: 17,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StickerPlaceholderPainter extends CustomPainter {
+  const _StickerPlaceholderPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final outer = Path()
+      ..moveTo(7, 15)
+      ..lineTo(size.width - 9, 3)
+      ..lineTo(size.width, size.height - 16)
+      ..lineTo(0, size.height - 4)
+      ..close();
+    canvas.drawPath(outer, Paint()..color = Colors.white);
+
+    final inner = Path()
+      ..moveTo(13, 20)
+      ..lineTo(size.width - 15, 10)
+      ..lineTo(size.width - 7, size.height - 21)
+      ..lineTo(7, size.height - 10)
+      ..close();
+    canvas.drawPath(inner, Paint()..color = Colors.black);
+  }
+
+  @override
+  bool shouldRepaint(_StickerPlaceholderPainter oldDelegate) => false;
 }
 
 // ── Animated Lottie sticker (.tgs = gzip-compressed Lottie JSON) ─────────────
@@ -147,7 +198,8 @@ class _TgsStickerState extends State<_TgsSticker> {
 
   @override
   Widget build(BuildContext context) {
-    if (_error || _bytes == null) return const SizedBox.shrink();
+    if (_error) return const _StickerPlaceholder();
+    if (_bytes == null) return const _StickerPlaceholder();
     return Lottie.memory(
       _bytes!,
       width: widget.size,
@@ -156,7 +208,7 @@ class _TgsStickerState extends State<_TgsSticker> {
       repeat: true,
       errorBuilder: (_, e, __) {
         debugPrint('Lottie render error: $e');
-        return const SizedBox.shrink();
+        return const _StickerPlaceholder();
       },
     );
   }
@@ -219,7 +271,7 @@ class _WebmStickerState extends State<_WebmSticker> {
   @override
   Widget build(BuildContext context) {
     final ctrl = _ctrl;
-    if (!_ready || ctrl == null) return const SizedBox.shrink();
+    if (!_ready || ctrl == null) return const _StickerPlaceholder();
     return SizedBox(
       width: widget.size,
       height: widget.size,

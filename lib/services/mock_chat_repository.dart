@@ -67,7 +67,9 @@ class MockChatRepository implements ChatRepository {
         updatedAt: DateTime(2016, 4, 19),
         participants: const [ann],
         avatarLabel: 'A',
-        showActivityBadge: true,
+        activity: ChatActivity.typing,
+        isPinned: true,
+        unreadCount: 1,
       ),
       ChatSummary(
         id: 'group-today',
@@ -82,7 +84,7 @@ class MockChatRepository implements ChatRepository {
         updatedAt: DateTime(2016, 4, 18),
         participants: const [yusuke],
         avatarLabel: 'Y',
-        showActivityBadge: true,
+        activity: ChatActivity.online,
       ),
       ChatSummary(
         id: 'ryuji',
@@ -97,6 +99,13 @@ class MockChatRepository implements ChatRepository {
         updatedAt: DateTime(2016, 4, 17),
         participants: const [ann],
         avatarLabel: 'A',
+      ),
+      ChatSummary(
+        id: 'velvet-channel',
+        title: 'Velvet Room News',
+        updatedAt: DateTime(2016, 4, 17),
+        participants: const [],
+        avatarLabel: 'VR',
       ),
     ];
   }

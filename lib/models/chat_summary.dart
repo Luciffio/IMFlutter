@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+enum ChatActivity { offline, online, typing }
+
 /// A single participant in a chat — used to render the avatar badge(s) on
 /// the chat list row and in the chat header.
 ///
@@ -29,7 +31,7 @@ class ChatSummary {
   final List<ChatParticipant> participants;
   final String? avatarPath;
   final String? avatarLabel;
-  final bool showActivityBadge;
+  final ChatActivity activity;
   final bool isPinned;
   final int unreadCount;
 
@@ -40,10 +42,11 @@ class ChatSummary {
     required this.participants,
     this.avatarPath,
     this.avatarLabel,
-    this.showActivityBadge = false,
+    this.activity = ChatActivity.offline,
     this.isPinned = false,
     this.unreadCount = 0,
   });
 
   bool get isUnread => unreadCount > 0;
+  bool get isActive => activity != ChatActivity.offline;
 }

@@ -48,11 +48,32 @@ class PersonaAvatar extends StatelessWidget {
 
   Widget _buildPortrait() {
     final asset = sender.portraitAsset;
-    if (asset == null) return const SizedBox.shrink();
+    if (asset == null) return _AvatarPlaceholder(sender: sender);
     return Image.asset(
       asset,
       fit: BoxFit.contain,
-      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      errorBuilder: (_, _, _) => _AvatarPlaceholder(sender: sender),
+    );
+  }
+}
+
+class _AvatarPlaceholder extends StatelessWidget {
+  final Sender sender;
+
+  const _AvatarPlaceholder({required this.sender});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        sender.name.substring(0, 1).toUpperCase(),
+        style: const TextStyle(
+          color: Colors.black,
+          fontFamily: 'OptimaNova',
+          fontSize: 36,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
     );
   }
 }
@@ -64,20 +85,11 @@ class _AvatarBackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     // Black box (outermost)
-    canvas.drawPath(
-      _blackBox(),
-      Paint()..color = Colors.black,
-    );
+    canvas.drawPath(_blackBox(), Paint()..color = Colors.black);
     // White box
-    canvas.drawPath(
-      _whiteBox(),
-      Paint()..color = Colors.white,
-    );
+    canvas.drawPath(_whiteBox(), Paint()..color = Colors.white);
     // Colored box
-    canvas.drawPath(
-      _coloredBox(),
-      Paint()..color = senderColor,
-    );
+    canvas.drawPath(_coloredBox(), Paint()..color = senderColor);
   }
 
   Path _blackBox() => Path()
@@ -102,7 +114,8 @@ class _AvatarBackgroundPainter extends CustomPainter {
     ..close();
 
   @override
-  bool shouldRepaint(_AvatarBackgroundPainter old) => old.senderColor != senderColor;
+  bool shouldRepaint(_AvatarBackgroundPainter old) =>
+      old.senderColor != senderColor;
 }
 
 class _AvatarClipClipper extends CustomClipper<Path> {
