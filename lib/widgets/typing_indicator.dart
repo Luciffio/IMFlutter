@@ -1,9 +1,9 @@
 import 'dart:math';
+
 import 'package:flutter/material.dart';
+
 import '../theme/persona_colors.dart';
 
-// Mirrors TypingIndicator.kt — speech bubble with 3 animated dots.
-// Bubble path comes exactly from typing_bubble.xml (viewport 230×116, display 90×45dp).
 class TypingIndicator extends StatefulWidget {
   const TypingIndicator({super.key});
 
@@ -13,69 +13,67 @@ class TypingIndicator extends StatefulWidget {
 
 class _TypingIndicatorState extends State<TypingIndicator>
     with SingleTickerProviderStateMixin {
-  late final AnimationController _scaleCtrl;
+  late final AnimationController _scaleController;
   late final Animation<double> _scale;
 
-  // -6..12 degrees, fixed for the lifetime of this widget
   final double _rotation = Random().nextDouble() * 18 - 6;
-
-  bool _dot1 = false, _dot2 = false, _dot3 = false;
+  bool _dot1 = false;
+  bool _dot2 = false;
+  bool _dot3 = false;
   bool _looping = true;
+
+  double get _rotationRadians => _rotation * pi / 180;
 
   @override
   void initState() {
     super.initState();
-
-    _scaleCtrl = AnimationController(
+    _scaleController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 116),
     );
-    _scale = Tween<double>(begin: 0.6, end: 1.0).animate(
-      CurvedAnimation(parent: _scaleCtrl, curve: Curves.easeOutBack),
+    _scale = Tween<double>(begin: 0.6, end: 1).animate(
+      CurvedAnimation(parent: _scaleController, curve: Curves.easeOutBack),
     );
 
-    Future.delayed(const Duration(milliseconds: 180), () {
-      if (mounted) _scaleCtrl.forward();
+    Future<void>.delayed(const Duration(milliseconds: 180), () {
+      if (mounted) _scaleController.forward();
     });
-
     _runDotLoop();
   }
 
   Future<void> _runDotLoop() async {
     while (_looping && mounted) {
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;
       setState(() => _dot1 = true);
-      await Future.delayed(const Duration(milliseconds: 300));
+
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;
       setState(() => _dot2 = true);
-      await Future.delayed(const Duration(milliseconds: 300));
+
+      await Future<void>.delayed(const Duration(milliseconds: 300));
       if (!mounted) return;
       setState(() => _dot3 = true);
-      await Future.delayed(const Duration(milliseconds: 400));
+
+      await Future<void>.delayed(const Duration(milliseconds: 400));
       if (!mounted) return;
-      setState(() => _dot1 = false);
-      await Future.delayed(const Duration(milliseconds: 100));
-      if (!mounted) return;
-      setState(() => _dot2 = false);
-      await Future.delayed(const Duration(milliseconds: 100));
-      if (!mounted) return;
-      setState(() => _dot3 = false);
+      setState(() {
+        _dot1 = false;
+        _dot2 = false;
+        _dot3 = false;
+      });
     }
   }
 
   @override
   void dispose() {
     _looping = false;
-    _scaleCtrl.dispose();
+    _scaleController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    // Align(centerLeft) gives the SizedBox loose constraints so it stays
-    // at exactly kAvatarWidth — otherwise ListView's tight-width constraint
-    // forces it to full screen width and Center puts the bubble in the middle.
     return Align(
       alignment: Alignment.centerLeft,
       child: SizedBox(
@@ -84,53 +82,54 @@ class _TypingIndicatorState extends State<TypingIndicator>
         child: Padding(
           padding: const EdgeInsets.only(left: 16),
           child: Center(
-          child: AnimatedBuilder(
-            animation: _scale,
-            builder: (_, child) => Transform.scale(
-              scale: _scale.value,
-              child: Transform.rotate(
-                angle: _rotation * pi / 180,
-                child: child,
+            child: AnimatedBuilder(
+              animation: _scale,
+              builder: (context, child) => Transform.scale(
+                scale: _scale.value,
+                child: Transform.rotate(angle: _rotationRadians, child: child),
               ),
-            ),
-            // Bubble is 90×45 dp (same ratio as the vector drawable)
-            child: CustomPaint(
-              size: const Size(90, 45),
-              painter: _BubblePainter(
-                dot1: _dot1,
-                dot2: _dot2,
-                dot3: _dot3,
+              child: SizedBox(
+                width: 90,
+                height: 45,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    const CustomPaint(painter: _BubblePainter()),
+                    Transform.rotate(
+                      angle: -_rotationRadians,
+                      child: CustomPaint(
+                        painter: _DotsPainter(
+                          dot1: _dot1,
+                          dot2: _dot2,
+                          dot3: _dot3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         ),
       ),
-    ), // SizedBox
-    ); // Align
+    );
   }
 }
 
 class _BubblePainter extends CustomPainter {
-  final bool dot1, dot2, dot3;
-  const _BubblePainter({
-    required this.dot1,
-    required this.dot2,
-    required this.dot3,
-  });
+  const _BubblePainter();
 
-  // Viewport from typing_bubble.xml: 230 × 116
-  static const _vw = 230.0;
-  static const _vh = 116.0;
+  static const _viewportWidth = 230.0;
+  static const _viewportHeight = 116.0;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final sx = size.width / _vw;
-    final sy = size.height / _vh;
+    final scaleX = size.width / _viewportWidth;
+    final scaleY = size.height / _viewportHeight;
 
-    double x(double v) => v * sx;
-    double y(double v) => v * sy;
+    double x(double value) => value * scaleX;
+    double y(double value) => value * scaleY;
 
-    // Exact path from typing_bubble.xml
     final bubble = Path()
       ..moveTo(x(0), y(113.32))
       ..lineTo(x(57.06), y(69.28))
@@ -146,40 +145,38 @@ class _BubblePainter extends CustomPainter {
       ..close();
 
     canvas.drawPath(bubble, Paint()..color = kPersonaDarkRed);
-
-    // Dots — positioned at display-space (center.x - 4dp, center.y),
-    // spaced 12dp apart. Display size is 90×45, so:
-    //   center = (45, 22.5) in display dp → (45/90*230, 22.5/45*116) in viewport
-    //   dot1_left = center.x - 4 = 41dp
-    const dot1X = 41.0 / 90.0 * _vw; // ≈ 104.9 vp
-    const dotSpacing = 12.0 / 90.0 * _vw; // ≈ 30.7 vp
-    const dotCY = 22.5 / 45.0 * _vh; // ≈ 58 vp
-    const dotW = 6.5 / 90.0 * _vw; // ≈ 16.2 vp  (dot ~6dp wide)
-    const dotH = 6.5 / 45.0 * _vh; // ≈ 16.3 vp
-
-    final dotPaint = Paint()..color = kPersonaRed;
-
-    if (dot1) {
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(x(dot1X), y(dotCY)), width: x(dotW), height: y(dotH)),
-        dotPaint,
-      );
-    }
-    if (dot2) {
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(x(dot1X + dotSpacing), y(dotCY)), width: x(dotW), height: y(dotH)),
-        dotPaint,
-      );
-    }
-    if (dot3) {
-      canvas.drawOval(
-        Rect.fromCenter(center: Offset(x(dot1X + dotSpacing * 2), y(dotCY)), width: x(dotW), height: y(dotH)),
-        dotPaint,
-      );
-    }
   }
 
   @override
-  bool shouldRepaint(_BubblePainter old) =>
-      old.dot1 != dot1 || old.dot2 != dot2 || old.dot3 != dot3;
+  bool shouldRepaint(_BubblePainter oldDelegate) => false;
+}
+
+class _DotsPainter extends CustomPainter {
+  final bool dot1;
+  final bool dot2;
+  final bool dot3;
+
+  const _DotsPainter({
+    required this.dot1,
+    required this.dot2,
+    required this.dot3,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const radius = 3.2;
+    const spacing = 12.0;
+    final center = Offset(size.width * 0.58, size.height * 0.5);
+    final paint = Paint()..color = kPersonaRed;
+
+    if (dot1) canvas.drawCircle(center.translate(-spacing, 0), radius, paint);
+    if (dot2) canvas.drawCircle(center, radius, paint);
+    if (dot3) canvas.drawCircle(center.translate(spacing, 0), radius, paint);
+  }
+
+  @override
+  bool shouldRepaint(_DotsPainter oldDelegate) =>
+      oldDelegate.dot1 != dot1 ||
+      oldDelegate.dot2 != dot2 ||
+      oldDelegate.dot3 != dot3;
 }
