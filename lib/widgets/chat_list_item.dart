@@ -400,15 +400,6 @@ class _ActivityBadgePainter extends CustomPainter {
       _octagon(center, 4.7),
       Paint()..color = const Color(0xFFF70000),
     );
-    if (activity == ChatActivity.typing) {
-      for (var index = 0; index < 3; index++) {
-        canvas.drawCircle(
-          Offset(6 + index * 3, 9),
-          0.8,
-          Paint()..color = Colors.white,
-        );
-      }
-    }
   }
 
   Path _octagon(Offset center, double radius) {
@@ -429,8 +420,7 @@ class _ActivityBadgePainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_ActivityBadgePainter oldDelegate) =>
-      oldDelegate.activity != activity;
+  bool shouldRepaint(_ActivityBadgePainter oldDelegate) => false;
 }
 
 class _BadgeBgPainter extends CustomPainter {

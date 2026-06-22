@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-enum ChatActivity { offline, online, typing }
+enum ChatActivity { offline, online }
 
 /// A single participant in a chat — used to render the avatar badge(s) on
 /// the chat list row and in the chat header.
@@ -48,5 +48,5 @@ class ChatSummary {
   });
 
   bool get isUnread => unreadCount > 0;
-  bool get isActive => activity != ChatActivity.offline;
+  bool get isActive => activity == ChatActivity.online;
 }

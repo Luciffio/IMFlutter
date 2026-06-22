@@ -8,7 +8,6 @@ import 'file_bubble.dart';
 import 'image_bubble.dart';
 import 'reply_bubble.dart';
 import 'sticker_bubble.dart';
-import 'typing_indicator.dart';
 
 // ── Per-message animation state ────────────────────────────────────────────
 
@@ -79,6 +78,11 @@ class TranscriptState extends ChangeNotifier {
   List<_EntryState> get entries => List.unmodifiable(_entries);
 
   int _messageIndex = 0;
+  bool _isSomeoneTyping = false;
+  bool _disposed = false;
+  int _typingRequest = 0;
+
+  bool get isSomeoneTyping => _isSomeoneTyping;
 
   TranscriptState({required this.vsync, required List<Message> messages})
     : _messages = messages;
@@ -98,9 +102,30 @@ class TranscriptState extends ChangeNotifier {
     _showMessage(_messages[_messageIndex++]);
   }
 
+  Future<void> advanceAfterTyping() async {
+    if (_isSomeoneTyping || _disposed) return;
+    if (_messageIndex >= _messages.length) {
+      advance();
+      return;
+    }
+
+    final request = ++_typingRequest;
+    _isSomeoneTyping = true;
+    notifyListeners();
+    await Future<void>.delayed(const Duration(milliseconds: 1100));
+    if (_disposed || request != _typingRequest) return;
+
+    _isSomeoneTyping = false;
+    _showMessage(_messages[_messageIndex++]);
+  }
+
   /// Add any message to the transcript immediately (user-sent or incoming
   /// from the backend).  Called by ChatScreen — not tied to the demo sequence.
-  void addMessage(Message message) => _showMessage(message);
+  void addMessage(Message message) {
+    _typingRequest++;
+    _isSomeoneTyping = false;
+    _showMessage(message);
+  }
 
   // ── Internal ───────────────────────────────────────────────────────────────
 
@@ -248,6 +273,7 @@ class TranscriptState extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     for (final e in _entries) e.dispose();
     super.dispose();
   }
@@ -304,14 +330,9 @@ class _TranscriptState extends State<Transcript> {
         // Extra 80 dp so the last item clears the floating InputBar (~70 dp)
         bottom: 180 + MediaQuery.of(context).padding.bottom,
       ),
-      itemCount: entries.length + 1, // +1 for TypingIndicator
+      itemCount: entries.length,
       separatorBuilder: (_, __) => const SizedBox(height: kEntrySpacing),
       itemBuilder: (context, index) {
-        // Stable key keeps TypingIndicator's State alive as the list grows
-        if (index == entries.length) {
-          return const TypingIndicator(key: ValueKey('typing_indicator'));
-        }
-
         final entry = entries[index];
 
         return AnimatedBuilder(

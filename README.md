@@ -26,7 +26,7 @@
 
 - Persona-inspired chat list with pinned, unread and selected states
 - `HOLD` badge for unread chats
-- Online, typing and offline mock states
+- Online and offline mock states
 - Animated message bubbles, portraits and connecting lines
 - Text, photo and file messages
 - Emoji picker, GIFs, static stickers and video stickers
@@ -43,7 +43,7 @@
 | Conversation UI | Ready | Animated local transcript |
 | Attachments | Ready | Photos, files, emoji, local GIFs and stickers |
 | Search | Prototype | Local and discovery mock results |
-| Presence | Prototype | Online, typing and offline placeholders |
+| Presence | Prototype | Online and offline placeholders |
 | Profile and settings | WIP | Deliberate placeholder screens |
 | Telegram backend | Planned | TDLib scaffold only |
 | Automated tests | Planned | Manual Android and Web verification |
@@ -54,7 +54,7 @@ The app is usable before Telegram is connected. `MockChatRepository` supplies
 stable data for the visual states that the real backend will eventually drive:
 
 - direct chat, group chat and channel-like chat;
-- online, typing and offline presence;
+- online and offline presence;
 - pinned and unpinned chats;
 - unread counts and the `HOLD` marker;
 - chats with portraits and chats with generated letter avatars;

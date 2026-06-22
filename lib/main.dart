@@ -10,6 +10,7 @@ import 'widgets/chat_header.dart';
 import 'widgets/chat_list_screen.dart';
 import 'widgets/input_bar.dart';
 import 'widgets/transcript.dart';
+import 'widgets/typing_indicator.dart';
 
 void main() {
   runApp(const MainApp());
@@ -176,7 +177,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       body: Stack(
         children: [
           GestureDetector(
-            onTap: _transcriptState.advance,
+            onTap: _transcriptState.advanceAfterTyping,
             child: Transcript(state: _transcriptState),
           ),
 
@@ -197,6 +198,26 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               onSendFile: _onSendFile,
               onSendSticker: _onSendSticker,
               onSendGif: _onSendGif,
+            ),
+          ),
+
+          Positioned(
+            left: 10,
+            bottom: 70 + MediaQuery.paddingOf(context).bottom,
+            child: AnimatedBuilder(
+              animation: _transcriptState,
+              builder: (context, _) {
+                return IgnorePointer(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 120),
+                    child: _transcriptState.isSomeoneTyping
+                        ? const TypingIndicator(
+                            key: ValueKey('typing_indicator'),
+                          )
+                        : const SizedBox.shrink(key: ValueKey('no_typing')),
+                  ),
+                );
+              },
             ),
           ),
         ],

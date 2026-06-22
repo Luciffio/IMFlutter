@@ -67,7 +67,6 @@ class MockChatRepository implements ChatRepository {
         updatedAt: DateTime(2016, 4, 19),
         participants: const [ann],
         avatarLabel: 'A',
-        activity: ChatActivity.typing,
         isPinned: true,
         unreadCount: 1,
       ),
