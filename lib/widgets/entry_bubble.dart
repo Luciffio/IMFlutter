@@ -50,20 +50,24 @@ class EntryBubble extends StatelessWidget {
 
 class _EntryLayoutBox extends MultiChildRenderObjectWidget {
   _EntryLayoutBox({required Widget avatar, required Widget textBox})
-      : super(children: [avatar, textBox]);
+    : super(children: [avatar, textBox]);
 
   @override
   RenderObject createRenderObject(BuildContext context) => _EntryRenderBox();
 
   @override
-  void updateRenderObject(BuildContext context, covariant _EntryRenderBox renderObject) {}
+  void updateRenderObject(
+    BuildContext context,
+    covariant _EntryRenderBox renderObject,
+  ) {}
 }
 
 class _EntryParentData extends ContainerBoxParentData<RenderBox> {}
 
 class _EntryRenderBox extends RenderBox
-    with ContainerRenderObjectMixin<RenderBox, _EntryParentData>,
-         RenderBoxContainerDefaultsMixin<RenderBox, _EntryParentData> {
+    with
+        ContainerRenderObjectMixin<RenderBox, _EntryParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _EntryParentData> {
   static const _overlap = 18.0;
   static const _topPad = 4.0;
   static const _botPad = 6.0;
@@ -89,7 +93,12 @@ class _EntryRenderBox extends RenderBox
     // Text box: up to (maxWidth - avatarWidth + overlap) wide, unconstrained height
     final textMaxWidth = constraints.maxWidth - kAvatarWidth + _overlap;
     textBox.layout(
-      BoxConstraints(maxWidth: textMaxWidth, minWidth: 0, minHeight: 0, maxHeight: double.infinity),
+      BoxConstraints(
+        maxWidth: textMaxWidth,
+        minWidth: 0,
+        minHeight: 0,
+        maxHeight: double.infinity,
+      ),
       parentUsesSize: true,
     );
 
@@ -135,6 +144,7 @@ class _EntryTextBox extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLong = text.length > 280;
     return CustomPaint(
       painter: _EntryBubblePainter(
         hScale: messageHorizontalScale,
@@ -143,12 +153,18 @@ class _EntryTextBox extends StatelessWidget {
       child: Opacity(
         opacity: messageTextAlpha.clamp(0.0, 1.0),
         child: Padding(
-          padding: const EdgeInsets.only(left: 42, top: 20, right: 32, bottom: 20),
+          padding: EdgeInsets.only(
+            left: isLong ? 38 : 42,
+            top: isLong ? 16 : 20,
+            right: isLong ? 28 : 32,
+            bottom: isLong ? 16 : 20,
+          ),
           child: Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               color: Colors.white,
-              fontSize: 14,
+              fontSize: isLong ? 12.5 : 14,
+              height: isLong ? 1.18 : null,
               fontFamily: 'OptimaNova',
               fontWeight: FontWeight.w900,
             ),
@@ -235,5 +251,6 @@ class _EntryBubblePainter extends CustomPainter {
     ..close();
 
   @override
-  bool shouldRepaint(_EntryBubblePainter old) => old.hScale != hScale || old.vScale != vScale;
+  bool shouldRepaint(_EntryBubblePainter old) =>
+      old.hScale != hScale || old.vScale != vScale;
 }

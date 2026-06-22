@@ -11,11 +11,13 @@ enum _ChatSection { chats, pinned, search, settings, profile }
 class ChatListScreen extends StatefulWidget {
   final ChatRepository repository;
   final void Function(ChatSummary chat) onOpenChat;
+  final VoidCallback onOpenAuth;
 
   const ChatListScreen({
     super.key,
     required this.repository,
     required this.onOpenChat,
+    required this.onOpenAuth,
   });
 
   @override
@@ -26,11 +28,19 @@ class _ChatListScreenState extends State<ChatListScreen> {
   List<ChatSummary>? _chats;
   String? _selectedChatId;
   _ChatSection _section = _ChatSection.chats;
+  late final PageController _pageController;
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController();
     _loadChats();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadChats() async {
@@ -45,6 +55,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
   void _openChat(ChatSummary chat) {
     setState(() => _selectedChatId = chat.id);
     widget.onOpenChat(chat);
+  }
+
+  void _selectSection(_ChatSection section) {
+    if (section == _section) return;
+    _pageController.animateToPage(
+      section.index,
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutCubic,
+    );
   }
 
   /// Small deterministic tilt per row so the stack looks hand-pinned.
@@ -67,15 +86,37 @@ class _ChatListScreenState extends State<ChatListScreen> {
             Expanded(
               child: Stack(
                 children: [
-                  Positioned.fill(child: _buildSection()),
+                  Positioned.fill(
+                    child: PageView(
+                      controller: _pageController,
+                      onPageChanged: (index) =>
+                          setState(() => _section = _ChatSection.values[index]),
+                      children: [
+                        _buildChatsSection(),
+                        _buildPinnedSection(),
+                        SearchSection(
+                          chats: _chats ?? const [],
+                          onOpenChat: _openChat,
+                        ),
+                        SettingsSection(onOpenAuth: widget.onOpenAuth),
+                        const ProfileSection(),
+                      ],
+                    ),
+                  ),
+                  const Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: 26,
+                    child: IgnorePointer(child: _TopListMist()),
+                  ),
                   Positioned(
                     left: 0,
                     right: 0,
                     bottom: 0,
                     child: _BottomNavigation(
                       selected: _section,
-                      onSelected: (section) =>
-                          setState(() => _section = section),
+                      onSelected: _selectSection,
                     ),
                   ),
                 ],
@@ -87,47 +128,63 @@ class _ChatListScreenState extends State<ChatListScreen> {
     );
   }
 
-  Widget _buildSection() {
-    switch (_section) {
-      case _ChatSection.chats:
-        final chats = _chats;
-        if (chats == null) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.white),
-          );
-        }
-        return ListView.builder(
-          padding: const EdgeInsets.fromLTRB(12, 8, 12, 92),
-          itemCount: chats.length,
-          itemBuilder: (ctx, i) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: ChatListItem(
-              chat: chats[i],
-              rotation: _rotationFor(i),
-              isSelected: chats[i].id == _selectedChatId,
-              onTap: () => _openChat(chats[i]),
-            ),
-          ),
-        );
-      case _ChatSection.pinned:
-        final chats = _chats;
-        if (chats == null) {
-          return const Center(
-            child: CircularProgressIndicator(color: Colors.white),
-          );
-        }
-        return PinnedSection(
-          chats: chats.where((chat) => chat.isPinned).toList(),
-          selectedChatId: _selectedChatId,
-          onOpenChat: _openChat,
-        );
-      case _ChatSection.search:
-        return SearchSection(chats: _chats ?? const [], onOpenChat: _openChat);
-      case _ChatSection.settings:
-        return const SettingsSection();
-      case _ChatSection.profile:
-        return const ProfileSection();
+  Widget _buildChatsSection() {
+    final chats = _chats;
+    if (chats == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
     }
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 92),
+      itemCount: chats.length,
+      itemBuilder: (ctx, i) => Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: ChatListItem(
+          chat: chats[i],
+          rotation: _rotationFor(i),
+          isSelected: chats[i].id == _selectedChatId,
+          onTap: () => _openChat(chats[i]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPinnedSection() {
+    final chats = _chats;
+    if (chats == null) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.white),
+      );
+    }
+    return PinnedSection(
+      chats: chats.where((chat) => chat.isPinned).toList(),
+      selectedChatId: _selectedChatId,
+      onOpenChat: _openChat,
+    );
+  }
+}
+
+class _TopListMist extends StatelessWidget {
+  const _TopListMist();
+
+  @override
+  Widget build(BuildContext context) {
+    return const DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            kPersonaRed,
+            Color(0xB8C41001),
+            Color(0x38C41001),
+            Color(0x00C41001),
+          ],
+          stops: [0, 0.18, 0.58, 1],
+        ),
+      ),
+    );
   }
 }
 

@@ -20,40 +20,48 @@ class ReplyBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isLong = text.length > 280;
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: LayoutBuilder(builder: (ctx, constraints) {
-        return Align(
-          alignment: Alignment.centerRight,
-          // ConstrainedBox ensures text wraps at maxWidth rather than going infinite
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: constraints.maxWidth),
-            child: CustomPaint(
-              painter: _ReplyBubblePainter(
-                hScale: messageHorizontalScale,
-                vScale: messageVerticalScale,
-              ),
-              // CustomPaint sizes itself to its child — i.e. text + padding
-              child: Opacity(
-                opacity: messageTextAlpha.clamp(0.0, 1.0),
-                child: Padding(
-                  padding: const EdgeInsets.only(
-                      left: 44, top: 20, right: 40, bottom: 20),
-                  child: Text(
-                    text,
-                    style: const TextStyle(
-                      color: Colors.black,
-                      fontSize: 14,
-                      fontFamily: 'OptimaNova',
-                      fontWeight: FontWeight.w900,
+      child: LayoutBuilder(
+        builder: (ctx, constraints) {
+          return Align(
+            alignment: Alignment.centerRight,
+            // ConstrainedBox ensures text wraps at maxWidth rather than going infinite
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+              child: CustomPaint(
+                painter: _ReplyBubblePainter(
+                  hScale: messageHorizontalScale,
+                  vScale: messageVerticalScale,
+                ),
+                // CustomPaint sizes itself to its child — i.e. text + padding
+                child: Opacity(
+                  opacity: messageTextAlpha.clamp(0.0, 1.0),
+                  child: Padding(
+                    padding: EdgeInsets.only(
+                      left: isLong ? 38 : 44,
+                      top: isLong ? 16 : 20,
+                      right: isLong ? 36 : 40,
+                      bottom: isLong ? 16 : 20,
+                    ),
+                    child: Text(
+                      text,
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: isLong ? 12.5 : 14,
+                        height: isLong ? 1.18 : null,
+                        fontFamily: 'OptimaNova',
+                        fontWeight: FontWeight.w900,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-      }),
+          );
+        },
+      ),
     );
   }
 }

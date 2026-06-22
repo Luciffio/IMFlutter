@@ -293,12 +293,77 @@ class _SearchResultTile extends StatelessWidget {
 }
 
 class SettingsSection extends StatelessWidget {
-  const SettingsSection({super.key});
+  final VoidCallback onOpenAuth;
+
+  const SettingsSection({super.key, required this.onOpenAuth});
 
   @override
   Widget build(BuildContext context) {
-    return const _WipPanel();
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const _WipPanel(),
+          const SizedBox(height: 28),
+          Transform.rotate(
+            angle: 0.025,
+            child: CustomPaint(
+              painter: const _SettingsActionPainter(),
+              child: InkWell(
+                onTap: onOpenAuth,
+                child: const SizedBox(
+                  width: 230,
+                  height: 58,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.login, color: Colors.black, size: 25),
+                      SizedBox(width: 10),
+                      Text(
+                        'AUTH SCREEN',
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontFamily: 'OptimaNova',
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
+}
+
+class _SettingsActionPainter extends CustomPainter {
+  const _SettingsActionPainter();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final shadow = Path()
+      ..moveTo(3, 8)
+      ..lineTo(size.width - 5, 0)
+      ..lineTo(size.width, size.height - 7)
+      ..lineTo(9, size.height)
+      ..close();
+    canvas.drawPath(shadow, Paint()..color = Colors.black);
+
+    final face = Path()
+      ..moveTo(0, 3)
+      ..lineTo(size.width - 10, 5)
+      ..lineTo(size.width - 5, size.height - 12)
+      ..lineTo(5, size.height - 5)
+      ..close();
+    canvas.drawPath(face, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(_SettingsActionPainter oldDelegate) => false;
 }
 
 class ProfileSection extends StatelessWidget {

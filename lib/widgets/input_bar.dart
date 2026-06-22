@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
 
 import 'composer_panel.dart';
+import 'typing_indicator.dart';
 
 typedef SendFileCallback = void Function(String path, String name, int size);
 
@@ -13,6 +14,7 @@ class InputBar extends StatefulWidget {
   final SendFileCallback? onSendFile;
   final ValueChanged<String>? onSendSticker;
   final ValueChanged<String>? onSendGif;
+  final bool showTypingIndicator;
 
   const InputBar({
     super.key,
@@ -21,6 +23,7 @@ class InputBar extends StatefulWidget {
     this.onSendFile,
     this.onSendSticker,
     this.onSendGif,
+    this.showTypingIndicator = false,
   });
 
   @override
@@ -108,6 +111,19 @@ class _InputBarState extends State<InputBar> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 120),
+              child: widget.showTypingIndicator
+                  ? const Padding(
+                      key: ValueKey('typing_indicator'),
+                      padding: EdgeInsets.only(left: 2, bottom: 7),
+                      child: TypingIndicator(),
+                    )
+                  : const SizedBox.shrink(key: ValueKey('no_typing')),
+            ),
+          ),
           AnimatedSwitcher(
             duration: const Duration(milliseconds: 140),
             transitionBuilder: (child, animation) => SizeTransition(
@@ -139,85 +155,105 @@ class _InputBarState extends State<InputBar> {
           ),
           CustomPaint(
             painter: const _BarPainter(),
-            child: SizedBox(
-              height: 54,
-              child: Row(
-                children: [
-                  const SizedBox(width: 14),
-                  Tooltip(
-                    message: 'Attachments',
-                    child: GestureDetector(
-                      onTap: () => _togglePanel(ComposerPanelMode.attachments),
-                      child: Transform.rotate(
-                        angle: _panelMode == ComposerPanelMode.attachments
-                            ? 0
-                            : -0.22,
-                        child: SizedBox(
-                          width: 26,
-                          height: 26,
-                          child: CustomPaint(
-                            painter: _PlusPainter(
-                              isClose:
-                                  _panelMode == ComposerPanelMode.attachments,
+            child: AnimatedSize(
+              duration: const Duration(milliseconds: 140),
+              curve: Curves.easeOutCubic,
+              alignment: Alignment.bottomCenter,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: 54),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 14, 0, 14),
+                      child: Tooltip(
+                        message: 'Attachments',
+                        child: GestureDetector(
+                          onTap: () =>
+                              _togglePanel(ComposerPanelMode.attachments),
+                          child: Transform.rotate(
+                            angle: _panelMode == ComposerPanelMode.attachments
+                                ? 0
+                                : -0.22,
+                            child: SizedBox(
+                              width: 26,
+                              height: 26,
+                              child: CustomPaint(
+                                painter: _PlusPainter(
+                                  isClose:
+                                      _panelMode ==
+                                      ComposerPanelMode.attachments,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: TextField(
-                      controller: _controller,
-                      focusNode: _focusNode,
-                      onTap: _closePanel,
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 14,
-                        fontFamily: 'OptimaNova',
-                        fontWeight: FontWeight.w900,
-                      ),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        isDense: true,
-                        contentPadding: EdgeInsets.zero,
-                        hintText: 'Message...',
-                        hintStyle: TextStyle(
-                          color: Colors.black38,
-                          fontSize: 14,
-                          fontFamily: 'OptimaNova',
-                          fontWeight: FontWeight.w900,
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        child: TextField(
+                          controller: _controller,
+                          focusNode: _focusNode,
+                          onTap: _closePanel,
+                          minLines: 1,
+                          maxLines: 3,
+                          keyboardType: TextInputType.multiline,
+                          textInputAction: TextInputAction.newline,
+                          scrollPhysics: const ClampingScrollPhysics(),
+                          style: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 14,
+                            fontFamily: 'OptimaNova',
+                            fontWeight: FontWeight.w900,
+                          ),
+                          decoration: const InputDecoration(
+                            border: InputBorder.none,
+                            isDense: true,
+                            contentPadding: EdgeInsets.zero,
+                            hintText: 'Message...',
+                            hintStyle: TextStyle(
+                              color: Colors.black38,
+                              fontSize: 14,
+                              fontFamily: 'OptimaNova',
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
                         ),
                       ),
-                      onSubmitted: (_) => _send(),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Tooltip(
-                    message: 'Emoji',
-                    child: GestureDetector(
-                      onTap: () => _togglePanel(ComposerPanelMode.emoji),
-                      child: SvgPicture.asset(
-                        'assets/icons/smile.svg',
-                        width: 32,
-                        height: 32,
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 11, 0, 11),
+                      child: Tooltip(
+                        message: 'Emoji',
+                        child: GestureDetector(
+                          onTap: () => _togglePanel(ComposerPanelMode.emoji),
+                          child: SvgPicture.asset(
+                            'assets/icons/smile.svg',
+                            width: 32,
+                            height: 32,
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  GestureDetector(
-                    onTap: _send,
-                    child: const SizedBox(
-                      width: 30,
-                      height: 30,
-                      child: Padding(
-                        padding: EdgeInsets.all(6),
-                        child: CustomPaint(painter: _TrianglePainter()),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 12, 14, 12),
+                      child: GestureDetector(
+                        onTap: _send,
+                        child: const SizedBox(
+                          width: 30,
+                          height: 30,
+                          child: Padding(
+                            padding: EdgeInsets.all(6),
+                            child: CustomPaint(painter: _TrianglePainter()),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 14),
-                ],
+                  ],
+                ),
               ),
             ),
           ),
