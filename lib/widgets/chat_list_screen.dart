@@ -76,50 +76,46 @@ class _ChatListScreenState extends State<ChatListScreen> {
       backgroundColor: kPersonaRed,
       body: SafeArea(
         bottom: false,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        child: Stack(
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 12, 20, 4),
-              child: _ImLogo(),
-            ),
-            Expanded(
-              child: Stack(
+            Positioned.fill(
+              child: PageView(
+                controller: _pageController,
+                onPageChanged: (index) =>
+                    setState(() => _section = _ChatSection.values[index]),
                 children: [
-                  Positioned.fill(
-                    child: PageView(
-                      controller: _pageController,
-                      onPageChanged: (index) =>
-                          setState(() => _section = _ChatSection.values[index]),
-                      children: [
-                        _buildChatsSection(),
-                        _buildPinnedSection(),
-                        SearchSection(
-                          chats: _chats ?? const [],
-                          onOpenChat: _openChat,
-                        ),
-                        SettingsSection(onOpenAuth: widget.onOpenAuth),
-                        const ProfileSection(),
-                      ],
+                  _buildChatsSection(),
+                  _buildPinnedSection(),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 108),
+                    child: SearchSection(
+                      chats: _chats ?? const [],
+                      onOpenChat: _openChat,
                     ),
                   ),
-                  const Positioned(
-                    left: 0,
-                    right: 0,
-                    top: 0,
-                    height: 26,
-                    child: IgnorePointer(child: _TopListMist()),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 108),
+                    child: SettingsSection(onOpenAuth: widget.onOpenAuth),
                   ),
-                  Positioned(
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    child: _BottomNavigation(
-                      selected: _section,
-                      onSelected: _selectSection,
-                    ),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 108),
+                    child: ProfileSection(),
                   ),
                 ],
+              ),
+            ),
+            const Positioned(
+              left: 20,
+              top: 12,
+              child: IgnorePointer(child: _ImLogo()),
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _BottomNavigation(
+                selected: _section,
+                onSelected: _selectSection,
               ),
             ),
           ],
@@ -136,7 +132,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 92),
+      padding: const EdgeInsets.fromLTRB(12, 112, 12, 92),
       itemCount: chats.length,
       itemBuilder: (ctx, i) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
@@ -161,29 +157,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
       chats: chats.where((chat) => chat.isPinned).toList(),
       selectedChatId: _selectedChatId,
       onOpenChat: _openChat,
-    );
-  }
-}
-
-class _TopListMist extends StatelessWidget {
-  const _TopListMist();
-
-  @override
-  Widget build(BuildContext context) {
-    return const DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            kPersonaRed,
-            Color(0xB8C41001),
-            Color(0x38C41001),
-            Color(0x00C41001),
-          ],
-          stops: [0, 0.18, 0.58, 1],
-        ),
-      ),
+      topPadding: 112,
     );
   }
 }

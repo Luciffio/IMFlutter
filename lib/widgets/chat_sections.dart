@@ -20,18 +20,20 @@ class PinnedSection extends StatelessWidget {
   final List<ChatSummary> chats;
   final String? selectedChatId;
   final ValueChanged<ChatSummary> onOpenChat;
+  final double topPadding;
 
   const PinnedSection({
     super.key,
     required this.chats,
     required this.selectedChatId,
     required this.onOpenChat,
+    this.topPadding = 8,
   });
 
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 8, 12, 96),
+      padding: EdgeInsets.fromLTRB(12, topPadding, 12, 96),
       children: [
         if (chats.isEmpty)
           const _EmptyPanel(
