@@ -7,6 +7,7 @@ import 'services/mock_chat_repository.dart';
 // import 'services/telegram_repository.dart'; // ← swap here when backend ready
 import 'theme/persona_colors.dart';
 import 'widgets/auth_screen.dart';
+import 'widgets/background_particles.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_list_screen.dart';
 import 'widgets/input_bar.dart';
@@ -229,6 +230,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
+          const Positioned.fill(child: BackgroundParticles()),
           GestureDetector(
             onTap: _transcriptState.advanceAfterTyping,
             child: Transcript(state: _transcriptState),

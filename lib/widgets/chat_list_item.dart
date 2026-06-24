@@ -99,9 +99,20 @@ class ChatListItem extends StatelessWidget {
                   top: -4,
                   child: SvgPicture.asset(
                     'assets/icons/hold_badge.svg',
-                    width: 68,
-                    height: 34,
-                    fit: BoxFit.contain,
+                    width: 76,
+                    height: 46,
+                    fit: BoxFit.fill,
+                  ),
+                ),
+              if (chat.isNew)
+                Positioned(
+                  left: -8,
+                  top: -4,
+                  child: SvgPicture.asset(
+                    'assets/icons/new_sign.svg',
+                    width: 76,
+                    height: 46,
+                    fit: BoxFit.fill,
                   ),
                 ),
             ],

@@ -33,6 +33,7 @@ class ChatSummary {
   final String? avatarLabel;
   final ChatActivity activity;
   final bool isPinned;
+  final bool isNew;
   final int unreadCount;
 
   const ChatSummary({
@@ -44,6 +45,7 @@ class ChatSummary {
     this.avatarLabel,
     this.activity = ChatActivity.offline,
     this.isPinned = false,
+    this.isNew = false,
     this.unreadCount = 0,
   });
 

@@ -76,6 +76,7 @@ class MockChatRepository implements ChatRepository {
         updatedAt: DateTime(2016, 4, 17),
         participants: const [ryuji, yusuke],
         avatarLabel: 'RY',
+        isNew: true,
       ),
       ChatSummary(
         id: 'yusuke',

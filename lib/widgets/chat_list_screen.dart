@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../models/chat_summary.dart';
 import '../services/chat_repository.dart';
 import '../theme/persona_colors.dart';
+import 'background_particles.dart';
 import 'chat_list_item.dart';
 import 'chat_sections.dart';
 
@@ -78,6 +79,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
         bottom: false,
         child: Stack(
           children: [
+            const Positioned.fill(child: BackgroundParticles()),
             Positioned.fill(
               child: PageView(
                 controller: _pageController,
