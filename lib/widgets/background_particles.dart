@@ -3,14 +3,16 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:path_drawing/path_drawing.dart';
 
-enum PersonaSeason { none, spring, winter }
+enum PersonaSeason { none, spring, summer, winter }
 
-enum PersonaParticleMode { auto, spring, winter, none }
+enum PersonaParticleMode { auto, spring, summer, winter, none }
 
 PersonaSeason resolvePersonaSeason(PersonaParticleMode mode, {DateTime? now}) {
   switch (mode) {
     case PersonaParticleMode.spring:
       return PersonaSeason.spring;
+    case PersonaParticleMode.summer:
+      return PersonaSeason.summer;
     case PersonaParticleMode.winter:
       return PersonaSeason.winter;
     case PersonaParticleMode.none:
@@ -19,6 +21,7 @@ PersonaSeason resolvePersonaSeason(PersonaParticleMode mode, {DateTime? now}) {
       final month = (now ?? DateTime.now()).month;
       if (month == 12 || month <= 2) return PersonaSeason.winter;
       if (month >= 3 && month <= 5) return PersonaSeason.spring;
+      if (month >= 6 && month <= 8) return PersonaSeason.summer;
       return PersonaSeason.none;
   }
 }
@@ -101,6 +104,18 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
             _reset();
           }
 
+          if (widget.season == PersonaSeason.summer) {
+            return CustomPaint(
+              painter: _SummerRaysPainter(
+                elapsedSeconds:
+                    (_ticker.lastElapsedDuration ?? Duration.zero)
+                        .inMilliseconds /
+                    1000,
+              ),
+              size: Size.infinite,
+            );
+          }
+
           return CustomPaint(
             painter: _ParticlesPainter(
               particles: _active,
@@ -125,6 +140,11 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
     if (_currentSeason != widget.season) {
       _reset();
       _currentSeason = widget.season;
+    }
+
+    if (widget.season == PersonaSeason.summer) {
+      setState(() {});
+      return;
     }
 
     if (!_initialized) {
@@ -199,6 +219,7 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
     return switch (season) {
       PersonaSeason.spring => _springShapes,
       PersonaSeason.winter => _winterShapes,
+      PersonaSeason.summer => const [],
       PersonaSeason.none => const [],
     };
   }
@@ -206,6 +227,8 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
   Color _colorForSeason(PersonaSeason season, bool bright) {
     return switch (season) {
       PersonaSeason.spring =>
+        bright ? const Color(0xFFF2657B) : const Color(0xFFE7354A),
+      PersonaSeason.summer =>
         bright ? const Color(0xFFF2657B) : const Color(0xFFE7354A),
       PersonaSeason.winter =>
         bright ? const Color(0xFF730D00) : const Color(0xFF9F0B00),
@@ -216,6 +239,7 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
   double _scaleForSeason(PersonaSeason season) {
     return switch (season) {
       PersonaSeason.spring => _randomBetween(0.42, 0.72),
+      PersonaSeason.summer => 0,
       PersonaSeason.winter => _randomBetween(0.28, 0.52),
       PersonaSeason.none => 0,
     };
@@ -223,6 +247,102 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
 
   double _randomBetween(double min, double max) =>
       min + _rng.nextDouble() * (max - min);
+}
+
+class _SummerRaysPainter extends CustomPainter {
+  final double elapsedSeconds;
+
+  const _SummerRaysPainter({required this.elapsedSeconds});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final t = elapsedSeconds;
+    final origin = Offset(size.width * 0.82, -190);
+
+    _drawRay(
+      canvas,
+      size,
+      origin: origin,
+      phase: t * 0.42,
+      baseTarget: Offset(-size.width * 0.36, size.height * 1.20),
+      sweepX: 112,
+      sweepY: 78,
+      startWidth: 34,
+      endWidth: 118,
+      color: const Color(0xFFF2657B),
+      opacity: 0.24,
+    );
+    _drawRay(
+      canvas,
+      size,
+      origin: Offset(size.width * 0.94, -178),
+      phase: t * 0.36 + math.pi * 0.92,
+      baseTarget: Offset(-size.width * 0.16, size.height * 1.16),
+      sweepX: 124,
+      sweepY: 76,
+      startWidth: 28,
+      endWidth: 92,
+      color: const Color(0xFFE7354A),
+      opacity: 0.19,
+    );
+  }
+
+  void _drawRay(
+    Canvas canvas,
+    Size size, {
+    required Offset origin,
+    required double phase,
+    required Offset baseTarget,
+    required double sweepX,
+    required double sweepY,
+    required double startWidth,
+    required double endWidth,
+    required Color color,
+    required double opacity,
+  }) {
+    final target = baseTarget.translate(
+      math.sin(phase) * sweepX,
+      math.cos(phase * 0.82) * sweepY,
+    );
+    final direction = target - origin;
+    final length = direction.distance;
+    if (length == 0) return;
+
+    final normal = Offset(-direction.dy / length, direction.dx / length);
+
+    for (final band in const [1.0, 0.78]) {
+      final startHalfWidth = startWidth * band;
+      final endHalfWidth = endWidth * band;
+      final bandOpacity = band == 1.0 ? opacity * 0.46 : opacity;
+      final path = Path()
+        ..moveTo(
+          origin.dx + normal.dx * startHalfWidth,
+          origin.dy + normal.dy * startHalfWidth,
+        )
+        ..lineTo(
+          target.dx + normal.dx * endHalfWidth,
+          target.dy + normal.dy * endHalfWidth,
+        )
+        ..lineTo(
+          target.dx - normal.dx * endHalfWidth,
+          target.dy - normal.dy * endHalfWidth,
+        )
+        ..lineTo(
+          origin.dx - normal.dx * startHalfWidth,
+          origin.dy - normal.dy * startHalfWidth,
+        )
+        ..close();
+
+      canvas.drawPath(
+        path,
+        Paint()..color = color.withValues(alpha: bandOpacity),
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_SummerRaysPainter oldDelegate) =>
+      oldDelegate.elapsedSeconds != elapsedSeconds;
 }
 
 class _Particle {

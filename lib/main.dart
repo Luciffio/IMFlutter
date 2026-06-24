@@ -237,6 +237,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
     _transcriptState = TranscriptState(vsync: this, messages: kMessages);
     _transcriptState.advance();
+    unawaited(widget.repository.markChatOpened(widget.chat.id));
 
     _incomingSub = widget.repository.incomingMessages.listen((msg) {
       _transcriptState.addMessage(msg);
@@ -252,7 +253,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
   void _onSend(String text) {
     _transcriptState.addMessage(Message(sender: Sender.ren, text: text));
-    widget.repository.sendMessage(text);
+    widget.repository.sendMessage(widget.chat.id, text);
   }
 
   void _onSendImage(String path) {

@@ -93,23 +93,23 @@ class ChatListItem extends StatelessWidget {
                 top: 10,
                 child: _ChatAvatarBadge(chat: chat, size: _badgeSize),
               ),
-              if (showHoldBadge && chat.isUnread)
-                Positioned(
-                  left: -8,
-                  top: -4,
-                  child: SvgPicture.asset(
-                    'assets/icons/hold_badge.svg',
-                    width: 76,
-                    height: 46,
-                    fit: BoxFit.fill,
-                  ),
-                ),
               if (chat.isNew)
                 Positioned(
                   left: -8,
                   top: -4,
                   child: SvgPicture.asset(
                     'assets/icons/new_sign.svg',
+                    width: 76,
+                    height: 46,
+                    fit: BoxFit.fill,
+                  ),
+                )
+              else if (showHoldBadge && chat.shouldShowHoldBadge)
+                Positioned(
+                  left: -8,
+                  top: -4,
+                  child: SvgPicture.asset(
+                    'assets/icons/hold_badge.svg',
                     width: 76,
                     height: 46,
                     fit: BoxFit.fill,
@@ -279,7 +279,7 @@ class _ChatAvatarBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isGroup = chat.participants.length > 1;
+    final isGroup = chat.type == ChatType.group;
 
     return SizedBox(
       width: size,

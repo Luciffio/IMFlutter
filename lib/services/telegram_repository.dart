@@ -57,8 +57,8 @@ class TelegramRepository implements ChatRepository {
   }
 
   @override
-  Future<void> sendMessage(String text) {
-    // TODO: tdlib.sendMessage(chatId: activeChatId!, text: text)
+  Future<void> sendMessage(String chatId, String text) {
+    // TODO: tdlib.sendMessage(chatId: int.parse(chatId), text: text)
     throw UnimplementedError('TelegramRepository.sendMessage()');
   }
 
@@ -79,5 +79,17 @@ class TelegramRepository implements ChatRepository {
     // TODO: tdlib.getChats(chatList: chatListMain, limit: 100)
     //       → resolve titles/photos → map to [ChatSummary]
     throw UnimplementedError('TelegramRepository.getChats()');
+  }
+
+  @override
+  Future<List<Message>> getMessages(String chatId) {
+    // TODO: tdlib.getChatHistory(chatId: int.parse(chatId), ...)
+    throw UnimplementedError('TelegramRepository.getMessages()');
+  }
+
+  @override
+  Future<void> markChatOpened(String chatId) {
+    // TODO: tdlib.viewMessages / mark messages as read for chatId
+    throw UnimplementedError('TelegramRepository.markChatOpened()');
   }
 }

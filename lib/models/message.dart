@@ -35,9 +35,17 @@ extension SenderInfo on Sender {
   }
 }
 
+enum MessageDeliveryStatus { sending, sent, delivered, read, failed }
+
+enum MessageKind { text, image, file, gif, sticker }
+
 class Message {
+  final String? id;
+  final String? chatId;
   final Sender sender;
   final String text;
+  final DateTime? createdAt;
+  final MessageDeliveryStatus status;
   final String? imagePath;
   final String? stickerPath;
   final String? gifPath;
@@ -46,8 +54,12 @@ class Message {
   final int? fileSize;
 
   const Message({
+    this.id,
+    this.chatId,
     required this.sender,
     this.text = '',
+    this.createdAt,
+    this.status = MessageDeliveryStatus.delivered,
     this.imagePath,
     this.stickerPath,
     this.gifPath,
@@ -62,6 +74,16 @@ class Message {
   bool get isFile => filePath != null;
   bool get isAnimatedMedia => isSticker || isGif;
   String? get animatedMediaPath => gifPath ?? stickerPath;
+
+  MessageKind get kind {
+    if (isImage) return MessageKind.image;
+    if (isFile) return MessageKind.file;
+    if (isGif) return MessageKind.gif;
+    if (isSticker) return MessageKind.sticker;
+    return MessageKind.text;
+  }
+
+  bool get isOutgoing => sender == Sender.ren;
 }
 
 final List<Message> kMessages = [

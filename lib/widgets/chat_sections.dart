@@ -111,7 +111,7 @@ class _SearchSectionState extends State<SearchSection> {
     ...widget.chats.map(
       (chat) => _SearchResult(
         title: chat.title,
-        subtitle: chat.participants.length > 1 ? 'YOUR GROUP' : 'YOUR CHAT',
+        subtitle: _chatSubtitle(chat),
         initials: _initials(chat),
         kind: _SearchKind.chat,
         chat: chat,
@@ -142,6 +142,14 @@ class _SearchSectionState extends State<SearchSection> {
       kind: _SearchKind.channel,
     ),
   ];
+
+  String _chatSubtitle(ChatSummary chat) {
+    return switch (chat.type) {
+      ChatType.direct => 'YOUR CHAT',
+      ChatType.group => 'YOUR GROUP',
+      ChatType.channel => 'YOUR CHANNEL',
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -425,6 +433,7 @@ class _SeasonModeControl extends StatelessWidget {
   static const _modes = [
     PersonaParticleMode.auto,
     PersonaParticleMode.spring,
+    PersonaParticleMode.summer,
     PersonaParticleMode.winter,
     PersonaParticleMode.none,
   ];
@@ -516,6 +525,7 @@ class _SeasonModeControl extends StatelessWidget {
     return switch (mode) {
       PersonaParticleMode.auto => 'DYNAMIC',
       PersonaParticleMode.spring => 'SPRING',
+      PersonaParticleMode.summer => 'SUMMER',
       PersonaParticleMode.winter => 'WINTER',
       PersonaParticleMode.none => 'NONE',
     };
@@ -525,6 +535,7 @@ class _SeasonModeControl extends StatelessWidget {
     return switch (mode) {
       PersonaParticleMode.auto => 'DYN',
       PersonaParticleMode.spring => 'SPR',
+      PersonaParticleMode.summer => 'SUM',
       PersonaParticleMode.winter => 'WIN',
       PersonaParticleMode.none => 'OFF',
     };

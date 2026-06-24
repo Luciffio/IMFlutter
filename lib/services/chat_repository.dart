@@ -6,8 +6,8 @@ import '../models/message.dart';
 /// Active implementation: [MockChatRepository] (no real server).
 /// Future implementation: [TelegramRepository] — swap in main.dart when ready.
 abstract class ChatRepository {
-  /// Send a text message to the active chat.
-  Future<void> sendMessage(String text);
+  /// Send a text message to a concrete chat.
+  Future<void> sendMessage(String chatId, String text);
 
   /// Stream of messages received from other participants.
   Stream<Message> get incomingMessages;
@@ -21,4 +21,11 @@ abstract class ChatRepository {
   /// List of chats for the current user, ordered by [ChatSummary.updatedAt]
   /// descending.  The chat list screen calls this once on open.
   Future<List<ChatSummary>> getChats();
+
+  /// Message history for a concrete chat. The mock can return demo messages;
+  /// Telegram will map this to getChatHistory.
+  Future<List<Message>> getMessages(String chatId);
+
+  /// Mark a chat as opened/read from the app's point of view.
+  Future<void> markChatOpened(String chatId);
 }
