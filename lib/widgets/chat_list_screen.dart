@@ -11,12 +11,22 @@ enum _ChatSection { chats, pinned, search, settings, profile }
 
 class ChatListScreen extends StatefulWidget {
   final ChatRepository repository;
+  final PersonaParticleMode particleMode;
+  final PersonaSeason particleSeason;
+  final bool transitionAnimationsEnabled;
+  final ValueChanged<PersonaParticleMode> onParticleModeChanged;
+  final ValueChanged<bool> onTransitionAnimationsChanged;
   final void Function(ChatSummary chat) onOpenChat;
   final VoidCallback onOpenAuth;
 
   const ChatListScreen({
     super.key,
     required this.repository,
+    required this.particleMode,
+    required this.particleSeason,
+    required this.transitionAnimationsEnabled,
+    required this.onParticleModeChanged,
+    required this.onTransitionAnimationsChanged,
     required this.onOpenChat,
     required this.onOpenAuth,
   });
@@ -60,6 +70,11 @@ class _ChatListScreenState extends State<ChatListScreen> {
 
   void _selectSection(_ChatSection section) {
     if (section == _section) return;
+    if (!widget.transitionAnimationsEnabled) {
+      _pageController.jumpToPage(section.index);
+      return;
+    }
+
     _pageController.animateToPage(
       section.index,
       duration: const Duration(milliseconds: 320),
@@ -79,7 +94,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
         bottom: false,
         child: Stack(
           children: [
-            const Positioned.fill(child: BackgroundParticles()),
+            Positioned.fill(
+              child: BackgroundParticles(season: widget.particleSeason),
+            ),
             Positioned.fill(
               child: PageView(
                 controller: _pageController,
@@ -97,7 +114,15 @@ class _ChatListScreenState extends State<ChatListScreen> {
                   ),
                   Padding(
                     padding: const EdgeInsets.only(top: 108),
-                    child: SettingsSection(onOpenAuth: widget.onOpenAuth),
+                    child: SettingsSection(
+                      particleMode: widget.particleMode,
+                      transitionAnimationsEnabled:
+                          widget.transitionAnimationsEnabled,
+                      onParticleModeChanged: widget.onParticleModeChanged,
+                      onTransitionAnimationsChanged:
+                          widget.onTransitionAnimationsChanged,
+                      onOpenAuth: widget.onOpenAuth,
+                    ),
                   ),
                   const Padding(
                     padding: EdgeInsets.only(top: 108),

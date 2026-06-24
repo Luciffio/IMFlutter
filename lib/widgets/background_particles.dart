@@ -3,7 +3,25 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:path_drawing/path_drawing.dart';
 
-enum PersonaSeason { none, spring }
+enum PersonaSeason { none, spring, winter }
+
+enum PersonaParticleMode { auto, spring, winter, none }
+
+PersonaSeason resolvePersonaSeason(PersonaParticleMode mode, {DateTime? now}) {
+  switch (mode) {
+    case PersonaParticleMode.spring:
+      return PersonaSeason.spring;
+    case PersonaParticleMode.winter:
+      return PersonaSeason.winter;
+    case PersonaParticleMode.none:
+      return PersonaSeason.none;
+    case PersonaParticleMode.auto:
+      final month = (now ?? DateTime.now()).month;
+      if (month == 12 || month <= 2) return PersonaSeason.winter;
+      if (month >= 3 && month <= 5) return PersonaSeason.spring;
+      return PersonaSeason.none;
+  }
+}
 
 class BackgroundParticles extends StatefulWidget {
   final PersonaSeason season;
@@ -26,6 +44,9 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
   final _active = <_Particle>[];
   final _pool = List<_Particle>.generate(_maxParticleCount, (_) => _Particle());
   final _springShapes = _sakuraPaths
+      .map((pathData) => _ParticleShape(parseSvgPathData(pathData)))
+      .toList(growable: false);
+  final _winterShapes = _snowflakePaths
       .map((pathData) => _ParticleShape(parseSvgPathData(pathData)))
       .toList(growable: false);
 
@@ -83,7 +104,7 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
           return CustomPaint(
             painter: _ParticlesPainter(
               particles: _active,
-              shapes: _springShapes,
+              shapes: _shapesForSeason(widget.season),
             ),
             size: Size.infinite,
           );
@@ -152,17 +173,18 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
   void _spawnParticle({bool spawnInBounds = false}) {
     if (_pool.isEmpty) return;
     final particle = _pool.removeLast();
-    final shapeIndex = _rng.nextInt(_springShapes.length);
+    final shapes = _shapesForSeason(widget.season);
+    final shapeIndex = _rng.nextInt(shapes.length);
     final bright = _rng.nextBool();
 
     particle
       ..shapeIndex = shapeIndex
-      ..color = bright ? const Color(0xFFF2657B) : const Color(0xFFE7354A)
+      ..color = _colorForSeason(widget.season, bright)
       ..x = spawnInBounds
           ? _randomBetween(0, _worldSize.width)
           : _randomBetween(0, _worldSize.width + 200)
       ..y = spawnInBounds ? _randomBetween(0, _worldSize.height) : -120
-      ..scale = _randomBetween(0.42, 0.72)
+      ..scale = _scaleForSeason(widget.season)
       ..rotation = _randomBetween(0, 360)
       ..xSpeed = _randomBetween(-80, 6)
       ..ySpeed = _randomBetween(60, 90)
@@ -171,6 +193,32 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
       ..amplitude = _randomBetween(0.003, 0.05);
 
     _active.add(particle);
+  }
+
+  List<_ParticleShape> _shapesForSeason(PersonaSeason season) {
+    return switch (season) {
+      PersonaSeason.spring => _springShapes,
+      PersonaSeason.winter => _winterShapes,
+      PersonaSeason.none => const [],
+    };
+  }
+
+  Color _colorForSeason(PersonaSeason season, bool bright) {
+    return switch (season) {
+      PersonaSeason.spring =>
+        bright ? const Color(0xFFF2657B) : const Color(0xFFE7354A),
+      PersonaSeason.winter =>
+        bright ? const Color(0xFF730D00) : const Color(0xFF9F0B00),
+      PersonaSeason.none => Colors.transparent,
+    };
+  }
+
+  double _scaleForSeason(PersonaSeason season) {
+    return switch (season) {
+      PersonaSeason.spring => _randomBetween(0.42, 0.72),
+      PersonaSeason.winter => _randomBetween(0.28, 0.52),
+      PersonaSeason.none => 0,
+    };
   }
 
   double _randomBetween(double min, double max) =>
@@ -232,4 +280,11 @@ const _sakuraPaths = [
   'M53.04,0L61.25,9.47C61.25,9.47 65.15,5 67.88,0.73C73.67,7.31 82.57,19.95 78.01,35.11C83.89,30.36 107.14,30.79 113.83,40.42C112.13,42.03 106.49,47.21 106.49,47.21L116.82,54.75C114.23,60.54 100.86,74.47 86.82,72.25C92.71,78.45 95.48,96.81 91.29,105.91C87.42,105.03 81.81,101.18 81.81,101.18C81.81,101.18 78.34,111.45 78.21,114.03C66.57,111.29 55.46,99.9 53.33,94.39C50.07,99.45 37.78,108.59 23.42,107.72C24.22,104.82 25.09,100.21 25.02,97.59C23.67,97.27 14.9,97.74 12.29,98.22C10.59,92.15 15.99,70.48 25.5,66.33C10.59,63.73 2.42,51.11 0,44.31C3.55,42.37 9.39,38.83 11.06,37.79C8.11,36.67 6.78,30.7 5.58,29.83C9.05,27.6 25.57,21.03 39.43,30C37.19,20.31 43.63,9.03 53.04,0Z',
   'M53.03,8.441C51.03,5.89 39.85,0 31.86,0C18.14,0 13.58,7.785 0,15.482C5.73,18.082 14.36,28.846 32.84,28.846C41.62,28.846 50.28,21.565 53.51,19.206C50.74,17.528 46,13.403 46,13.403C47.53,11.753 50.78,9.484 53.03,8.441Z',
   'M57.56,7.398C55.06,3.477 47.77,-0.269 37.05,0.015C11.23,0.698 10.17,21.993 0,27.329C4.92,28.344 21.78,33.506 34.5,33.072C44.04,32.747 53.31,27.889 59.41,19.397C57.11,17.87 51.87,11.328 51.87,11.328C51.87,11.328 56.16,8.412 57.56,7.398Z',
+];
+
+const _snowflakePaths = [
+  'M50 0L57 31L84 13L69 42L100 50L69 58L84 87L57 69L50 100L43 69L16 87L31 58L0 50L31 42L16 13L43 31Z',
+  'M46 0L54 0L54 28L77 12L83 18L63 39L92 33L96 41L69 50L96 59L92 67L63 61L83 82L77 88L54 72L54 100L46 100L46 72L23 88L17 82L37 61L8 67L4 59L31 50L4 41L8 33L37 39L17 18L23 12L46 28Z',
+  'M39 0L47 0L47 23L57 23L57 0L65 0L65 23L83 10L89 17L71 35L94 35L94 44L70 44L76 54L100 54L100 63L82 63L94 82L87 88L69 70L69 94L60 94L60 70L50 70L50 94L41 94L41 70L23 88L16 82L28 63L10 63L10 54L34 54L40 44L16 44L16 35L39 35L21 17L27 10L45 23L39 23Z',
+  'M14 0C23 0 27 6 27 11C27 16 24 26 12 26C7 26 0 23 0 16C0 7 7 0 14 0Z',
 ];

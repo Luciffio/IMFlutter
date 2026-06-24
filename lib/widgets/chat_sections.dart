@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/chat_summary.dart';
+import 'background_particles.dart';
 import 'chat_list_item.dart';
 
 const _red = Color(0xFFF70000);
@@ -295,9 +296,20 @@ class _SearchResultTile extends StatelessWidget {
 }
 
 class SettingsSection extends StatelessWidget {
+  final PersonaParticleMode particleMode;
+  final bool transitionAnimationsEnabled;
+  final ValueChanged<PersonaParticleMode> onParticleModeChanged;
+  final ValueChanged<bool> onTransitionAnimationsChanged;
   final VoidCallback onOpenAuth;
 
-  const SettingsSection({super.key, required this.onOpenAuth});
+  const SettingsSection({
+    super.key,
+    required this.particleMode,
+    required this.transitionAnimationsEnabled,
+    required this.onParticleModeChanged,
+    required this.onTransitionAnimationsChanged,
+    required this.onOpenAuth,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -306,7 +318,17 @@ class SettingsSection extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const _WipPanel(),
-          const SizedBox(height: 28),
+          const SizedBox(height: 22),
+          _SeasonModeControl(
+            mode: particleMode,
+            onChanged: onParticleModeChanged,
+          ),
+          const SizedBox(height: 18),
+          _TransitionToggle(
+            enabled: transitionAnimationsEnabled,
+            onChanged: onTransitionAnimationsChanged,
+          ),
+          const SizedBox(height: 22),
           Transform.rotate(
             angle: 0.025,
             child: CustomPaint(
@@ -339,6 +361,173 @@ class SettingsSection extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+class _TransitionToggle extends StatelessWidget {
+  final bool enabled;
+  final ValueChanged<bool> onChanged;
+
+  const _TransitionToggle({required this.enabled, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Transform.rotate(
+      angle: 0.01,
+      child: CustomPaint(
+        painter: const _BlackPanelPainter(),
+        child: InkWell(
+          onTap: () => onChanged(!enabled),
+          child: SizedBox(
+            width: 310,
+            height: 64,
+            child: Row(
+              children: [
+                const SizedBox(width: 14),
+                Checkbox(
+                  value: enabled,
+                  onChanged: (value) => onChanged(value ?? false),
+                  checkColor: Colors.white,
+                  fillColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.selected)) return _red;
+                    return Colors.white;
+                  }),
+                  side: const BorderSide(color: Colors.white, width: 2),
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'TRANSITIONS',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: _titleStyle.copyWith(fontSize: 20),
+                  ),
+                ),
+                Text(
+                  enabled ? 'ON' : 'OFF',
+                  style: _metaStyle.copyWith(
+                    color: enabled ? _red : Colors.white70,
+                    fontSize: 13,
+                  ),
+                ),
+                const SizedBox(width: 18),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SeasonModeControl extends StatelessWidget {
+  static const _modes = [
+    PersonaParticleMode.auto,
+    PersonaParticleMode.spring,
+    PersonaParticleMode.winter,
+    PersonaParticleMode.none,
+  ];
+
+  final PersonaParticleMode mode;
+  final ValueChanged<PersonaParticleMode> onChanged;
+
+  const _SeasonModeControl({required this.mode, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    final index = _modes.indexOf(mode).clamp(0, _modes.length - 1);
+
+    return Transform.rotate(
+      angle: -0.012,
+      child: CustomPaint(
+        painter: const _BlackPanelPainter(),
+        child: SizedBox(
+          width: 310,
+          height: 124,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(18, 13, 18, 10),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.ac_unit, color: _red, size: 20),
+                    const SizedBox(width: 8),
+                    Text('SEASON', style: _titleStyle.copyWith(fontSize: 20)),
+                    const Spacer(),
+                    Text(
+                      _modeLabel(mode),
+                      style: _metaStyle.copyWith(color: Colors.white),
+                    ),
+                  ],
+                ),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    activeTrackColor: _red,
+                    inactiveTrackColor: Colors.white,
+                    thumbColor: Colors.white,
+                    overlayColor: _red.withValues(alpha: 0.18),
+                    trackHeight: 5,
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 8,
+                    ),
+                    tickMarkShape: const RoundSliderTickMarkShape(
+                      tickMarkRadius: 2.8,
+                    ),
+                    activeTickMarkColor: Colors.black,
+                    inactiveTickMarkColor: Colors.black,
+                  ),
+                  child: Slider(
+                    min: 0,
+                    max: (_modes.length - 1).toDouble(),
+                    divisions: _modes.length - 1,
+                    value: index.toDouble(),
+                    onChanged: (value) {
+                      final nextIndex = value.round().clamp(
+                        0,
+                        _modes.length - 1,
+                      );
+                      onChanged(_modes[nextIndex]);
+                    },
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    for (final entry in _modes.indexed)
+                      Text(
+                        _shortModeLabel(entry.$2),
+                        style: _metaStyle.copyWith(
+                          color: entry.$1 == index ? _red : Colors.white70,
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _modeLabel(PersonaParticleMode mode) {
+    return switch (mode) {
+      PersonaParticleMode.auto => 'DYNAMIC',
+      PersonaParticleMode.spring => 'SPRING',
+      PersonaParticleMode.winter => 'WINTER',
+      PersonaParticleMode.none => 'NONE',
+    };
+  }
+
+  String _shortModeLabel(PersonaParticleMode mode) {
+    return switch (mode) {
+      PersonaParticleMode.auto => 'DYN',
+      PersonaParticleMode.spring => 'SPR',
+      PersonaParticleMode.winter => 'WIN',
+      PersonaParticleMode.none => 'OFF',
+    };
   }
 }
 

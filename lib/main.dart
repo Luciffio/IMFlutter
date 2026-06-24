@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'models/chat_summary.dart';
 import 'models/message.dart';
 import 'services/chat_repository.dart';
@@ -66,14 +67,20 @@ class _RootShell extends StatefulWidget {
 }
 
 class _RootShellState extends State<_RootShell> {
+  static const _particleModeKey = 'settings.particleMode';
+  static const _transitionsKey = 'settings.transitionAnimationsEnabled';
+
   late final ChatRepository _chatRepo;
   bool _showAuth = false;
+  PersonaParticleMode _particleMode = PersonaParticleMode.spring;
+  bool _transitionAnimationsEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _chatRepo = MockChatRepository();
     _chatRepo.connect();
+    _loadSettings();
   }
 
   @override
@@ -85,10 +92,20 @@ class _RootShellState extends State<_RootShell> {
   void _openChat(BuildContext context, ChatSummary chat) {
     Navigator.of(context).push(
       PageRouteBuilder(
-        transitionDuration: const Duration(milliseconds: 360),
-        reverseTransitionDuration: const Duration(milliseconds: 280),
-        pageBuilder: (_, _, _) => ChatScreen(chat: chat, repository: _chatRepo),
+        transitionDuration: _transitionAnimationsEnabled
+            ? const Duration(milliseconds: 360)
+            : Duration.zero,
+        reverseTransitionDuration: _transitionAnimationsEnabled
+            ? const Duration(milliseconds: 280)
+            : Duration.zero,
+        pageBuilder: (_, _, _) => ChatScreen(
+          chat: chat,
+          repository: _chatRepo,
+          particleSeason: resolvePersonaSeason(_particleMode),
+        ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          if (!_transitionAnimationsEnabled) return child;
+
           final curved = CurvedAnimation(
             parent: animation,
             curve: Curves.easeOutCubic,
@@ -121,13 +138,49 @@ class _RootShellState extends State<_RootShell> {
     );
   }
 
+  Future<void> _loadSettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+
+    setState(() {
+      _particleMode = _particleModeFromName(prefs.getString(_particleModeKey));
+      _transitionAnimationsEnabled =
+          prefs.getBool(_transitionsKey) ?? _transitionAnimationsEnabled;
+    });
+  }
+
+  Future<void> _setParticleMode(PersonaParticleMode mode) async {
+    setState(() => _particleMode = mode);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_particleModeKey, mode.name);
+  }
+
+  Future<void> _setTransitionAnimationsEnabled(bool enabled) async {
+    setState(() => _transitionAnimationsEnabled = enabled);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_transitionsKey, enabled);
+  }
+
+  PersonaParticleMode _particleModeFromName(String? value) {
+    return PersonaParticleMode.values.firstWhere(
+      (mode) => mode.name == value,
+      orElse: () => PersonaParticleMode.spring,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final particleSeason = resolvePersonaSeason(_particleMode);
+
     return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 420),
+      duration: _transitionAnimationsEnabled
+          ? const Duration(milliseconds: 420)
+          : Duration.zero,
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       transitionBuilder: (child, animation) {
+        if (!_transitionAnimationsEnabled) return child;
+
         final slide = Tween<Offset>(
           begin: const Offset(0, 0.12),
           end: Offset.zero,
@@ -146,6 +199,11 @@ class _RootShellState extends State<_RootShell> {
           : ChatListScreen(
               key: const ValueKey('chat_list'),
               repository: _chatRepo,
+              particleMode: _particleMode,
+              particleSeason: particleSeason,
+              transitionAnimationsEnabled: _transitionAnimationsEnabled,
+              onParticleModeChanged: _setParticleMode,
+              onTransitionAnimationsChanged: _setTransitionAnimationsEnabled,
               onOpenChat: (chat) => _openChat(context, chat),
               onOpenAuth: () => setState(() => _showAuth = true),
             ),
@@ -156,8 +214,14 @@ class _RootShellState extends State<_RootShell> {
 class ChatScreen extends StatefulWidget {
   final ChatSummary chat;
   final ChatRepository repository;
+  final PersonaSeason particleSeason;
 
-  const ChatScreen({super.key, required this.chat, required this.repository});
+  const ChatScreen({
+    super.key,
+    required this.chat,
+    required this.repository,
+    required this.particleSeason,
+  });
 
   @override
   State<ChatScreen> createState() => _ChatScreenState();
@@ -230,7 +294,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       resizeToAvoidBottomInset: true,
       body: Stack(
         children: [
-          const Positioned.fill(child: BackgroundParticles()),
+          Positioned.fill(
+            child: BackgroundParticles(season: widget.particleSeason),
+          ),
           GestureDetector(
             onTap: _transcriptState.advanceAfterTyping,
             child: Transcript(state: _transcriptState),
