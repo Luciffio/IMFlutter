@@ -24,8 +24,9 @@
 
 ## Highlights
 
-- Persona-inspired chat list with pinned, unread and selected states
-- `HOLD` badge for unread chats
+- Persona-inspired chat list with pinned, new, hold and selected states
+- `NEW` badge for incoming unread messages
+- `HOLD` badge for chats that still need your reply
 - Online and offline mock states
 - Animated message bubbles, portraits and connecting lines
 - Text, photo and file messages
@@ -39,7 +40,7 @@
 
 | Area | Status | Notes |
 | --- | --- | --- |
-| Chat list | Ready | Mock chats, pinned filter, unread HOLD state |
+| Chat list | Ready | Mock chats, pinned filter, NEW/HOLD state |
 | Conversation UI | Ready | Animated local transcript |
 | Attachments | Ready | Photos, files, emoji, local GIFs and stickers |
 | Search | Prototype | Local and discovery mock results |
@@ -56,7 +57,7 @@ stable data for the visual states that the real backend will eventually drive:
 - direct chat, group chat and channel-like chat;
 - online and offline presence;
 - pinned and unpinned chats;
-- unread counts and the `HOLD` marker;
+- unread counts, the `NEW` marker and reply-needed `HOLD` marker;
 - chats with portraits and chats with generated letter avatars;
 - image, file, GIF and sticker messages;
 - visible fallbacks for missing avatars and unavailable sticker media.
@@ -116,13 +117,25 @@ assets/
 The current build uses `MockChatRepository`, so it launches without an account,
 API keys or a server. `ChatRepository` isolates the UI from the transport layer.
 
-`TelegramRepository` contains the integration outline for authorization, chat
-loading, message synchronization and media transfer. The intended production
-backend is TDLib.
+`TelegramRepository` is backed by TDLib through `handy_tdlib`, but it is opt-in
+while the integration is still being stabilized. Mock mode remains the default.
+
+Run the TDLib spike with Telegram API credentials from
+[my.telegram.org](https://my.telegram.org):
+
+```bash
+flutter run -d android \
+  --dart-define=USE_TELEGRAM=true \
+  --dart-define=TG_API_ID=123456 \
+  --dart-define=TG_API_HASH=your_api_hash
+```
+
+The first backend target is intentionally small: authorization, chat list,
+history for one chat and text sending.
 
 ## Roadmap
 
-1. Add the TDLib runtime and authorization flow.
+1. Stabilize TDLib authorization on Android devices.
 2. Replace mock chats, presence and unread counters with Telegram updates.
 3. Connect global search, pinned chats and media history.
 4. Upload photos, files, GIFs and stickers through Telegram.

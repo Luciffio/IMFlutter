@@ -5,7 +5,7 @@ import 'models/chat_summary.dart';
 import 'models/message.dart';
 import 'services/chat_repository.dart';
 import 'services/mock_chat_repository.dart';
-// import 'services/telegram_repository.dart'; // ← swap here when backend ready
+import 'services/telegram_repository.dart';
 import 'theme/persona_colors.dart';
 import 'widgets/auth_screen.dart';
 import 'widgets/background_particles.dart';
@@ -78,7 +78,7 @@ class _RootShellState extends State<_RootShell> {
   @override
   void initState() {
     super.initState();
-    _chatRepo = MockChatRepository();
+    _chatRepo = _createRepository();
     _chatRepo.connect();
     _loadSettings();
   }
@@ -165,6 +165,16 @@ class _RootShellState extends State<_RootShell> {
     return PersonaParticleMode.values.firstWhere(
       (mode) => mode.name == value,
       orElse: () => PersonaParticleMode.spring,
+    );
+  }
+
+  ChatRepository _createRepository() {
+    const useTelegram = bool.fromEnvironment('USE_TELEGRAM');
+    if (!useTelegram) return MockChatRepository();
+
+    return TelegramRepository(
+      apiId: int.fromEnvironment('TG_API_ID'),
+      apiHash: String.fromEnvironment('TG_API_HASH'),
     );
   }
 

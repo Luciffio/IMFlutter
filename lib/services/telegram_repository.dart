@@ -1,150 +1,422 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
+
+import '../models/auth_session.dart';
 import '../models/chat_summary.dart';
 import '../models/message.dart';
-import '../models/auth_session.dart';
 import 'chat_repository.dart';
+import 'tdlib_gateway.dart';
 
-/// Telegram backend — replace [MockChatRepository] with this in main.dart
-/// once the integration is ready.
-///
-/// ── Integration plan ──────────────────────────────────────────────────────
-///
-/// 1. Pick a client library:
-///      tdlib: ^0.x.x         # https://pub.dev/packages/tdlib — bundles
-///                              libtdjson for iOS/Android/desktop
-///      telegram_client: ...  # pure-Dart MTProto alternative
-///
-/// 2. [connect] — initialise the client and run the auth flow:
-///      - TdlibParameters(apiId, apiHash, systemLanguageCode, ...)
-///      - Handle authorizationStateWaitPhoneNumber → send phone
-///      - Handle authorizationStateWaitCode        → user enters SMS code
-///      - Handle authorizationStateWaitPassword    → 2FA password
-///      - Handle authorizationStateReady           → ready to use
-///      - Persist the session DB so the user logs in once.
-///
-/// 3. [getChats] — load the chat list:
-///      - Call getChats(chatList: chatListMain, limit: 100)
-///      - For each id → getChat(id) → getUser(id) / getBasicGroup / getSupergroup
-///      - Download profile photos (downloadFile on the small photo)
-///      - Map to [ChatSummary] + [ChatParticipant]
-///
-/// 4. [sendMessage] — forward to Telegram:
-///      tdlib.sendMessage(chatId: activeChatId, text: text)
-///
-/// 5. [incomingMessages] — stream updateNewMessage events:
-///      - Subscribe, map TDLib Message → local [Message] model
-///      - Push into the stream so ChatScreen can call addMessage()
-///
-/// 6. Swap in main.dart:
-///      _chatRepository = TelegramRepository(
-///        apiId: const int.fromEnvironment('TG_API_ID'),
-///        apiHash: const String.fromEnvironment('TG_API_HASH'),
-///      );
-///
-/// ──────────────────────────────────────────────────────────────────────────
 class TelegramRepository implements ChatRepository {
   final int apiId;
   final String apiHash;
+  final TdlibGateway _gateway;
 
-  // The chat that is currently open in the UI.
-  // Set this when the user navigates to a conversation.
-  int? activeChatId;
+  final _messageController = StreamController<Message>.broadcast();
+  final _chatController = StreamController<List<ChatSummary>>.broadcast();
+  final _authController = StreamController<AuthSessionState>.broadcast();
 
-  TelegramRepository({required this.apiId, required this.apiHash});
+  final _chatsById = <String, ChatSummary>{};
+  final _messagesByChat = <String, List<Message>>{};
+
+  StreamSubscription<TdJson>? _updatesSub;
+  AuthSessionState _authState = const AuthSessionState.signedOut();
+  var _connected = false;
+  var _ready = false;
+
+  TelegramRepository({
+    required this.apiId,
+    required this.apiHash,
+    TdlibGateway? gateway,
+  }) : _gateway = gateway ?? TdlibGateway();
 
   @override
-  Future<void> connect() {
-    // TODO: init TDLib, run auth flow
-    throw UnimplementedError('TelegramRepository.connect()');
+  Stream<Message> get incomingMessages => _messageController.stream;
+
+  @override
+  Stream<List<ChatSummary>> get chats => _chatController.stream;
+
+  @override
+  Stream<AuthSessionState> get authState => _authController.stream;
+
+  @override
+  Future<void> connect() async {
+    if (_connected) return;
+    _connected = true;
+
+    if (apiId == 0 || apiHash.isEmpty) {
+      _setAuthState(
+        const AuthSessionState(
+          stage: AuthStage.signedOut,
+          errorMessage: 'TG_API_ID / TG_API_HASH REQUIRED',
+        ),
+      );
+      return;
+    }
+
+    await _gateway.initialize();
+    _updatesSub = _gateway.updates.listen(_handleUpdate);
+    final state = await _gateway.invoke({'@type': 'getAuthorizationState'});
+    _handleAuthorizationState(state['authorization_state'] as TdJson? ?? state);
   }
 
   @override
-  Future<void> sendMessage(String chatId, String text) {
-    // TODO: tdlib.sendMessage(chatId: int.parse(chatId), text: text)
-    throw UnimplementedError('TelegramRepository.sendMessage()');
+  Future<void> disconnect() async {
+    await _updatesSub?.cancel();
+    await _gateway.close();
+    await _messageController.close();
+    await _chatController.close();
+    await _authController.close();
   }
 
   @override
-  Stream<Message> get incomingMessages {
-    // TODO: map TDLib updateNewMessage → Message and yield into stream
-    throw UnimplementedError('TelegramRepository.incomingMessages');
+  Future<AuthSessionState> getAuthState() async {
+    return _authState;
   }
 
   @override
-  Stream<List<ChatSummary>> get chats {
-    // TODO: emit TDLib chat list / unread / order updates
-    throw UnimplementedError('TelegramRepository.chats');
+  Future<void> startAuthentication() async {
+    await connect();
+    if (_ready) {
+      _setAuthState(const AuthSessionState.ready());
+      return;
+    }
+
+    final state = await _gateway.invoke({'@type': 'getAuthorizationState'});
+    _handleAuthorizationState(state['authorization_state'] as TdJson? ?? state);
   }
 
   @override
-  Stream<AuthSessionState> get authState {
-    // TODO: map TDLib authorizationState updates.
-    throw UnimplementedError('TelegramRepository.authState');
+  Future<void> submitPhoneNumber(String phoneNumber) async {
+    await _invokeAuth({
+      '@type': 'setAuthenticationPhoneNumber',
+      'phone_number': phoneNumber.trim(),
+      'settings': null,
+    });
   }
 
   @override
-  Future<void> disconnect() {
-    // TODO: tdlib.close()
-    throw UnimplementedError('TelegramRepository.disconnect()');
+  Future<void> submitCode(String code) async {
+    await _invokeAuth({
+      '@type': 'checkAuthenticationCode',
+      'code': code.trim(),
+    });
   }
 
   @override
-  Future<List<ChatSummary>> getChats() {
-    // TODO: tdlib.getChats(chatList: chatListMain, limit: 100)
-    //       → resolve titles/photos → map to [ChatSummary]
-    throw UnimplementedError('TelegramRepository.getChats()');
+  Future<void> submitPassword(String password) async {
+    await _invokeAuth({
+      '@type': 'checkAuthenticationPassword',
+      'password': password,
+    });
   }
 
   @override
-  Future<List<Message>> getMessages(String chatId) {
-    // TODO: tdlib.getChatHistory(chatId: int.parse(chatId), ...)
-    throw UnimplementedError('TelegramRepository.getMessages()');
+  Future<void> cancelAuthentication() async {
+    _setAuthState(_authState.copyWith(clearError: true));
   }
 
   @override
-  Future<void> markChatOpened(String chatId) {
-    // TODO: tdlib.viewMessages / mark messages as read for chatId
-    throw UnimplementedError('TelegramRepository.markChatOpened()');
+  Future<void> signOut() async {
+    await _gateway.invoke({'@type': 'logOut'});
+    _ready = false;
+    _setAuthState(const AuthSessionState.signedOut());
   }
 
   @override
-  Future<AuthSessionState> getAuthState() {
-    // TODO: return latest mapped TDLib authorization state.
-    throw UnimplementedError('TelegramRepository.getAuthState()');
+  Future<List<ChatSummary>> getChats() async {
+    await connect();
+    if (!_ready) return _sortedChats();
+
+    final result = await _gateway.invoke({
+      '@type': 'getChats',
+      'chat_list': null,
+      'limit': 80,
+    });
+
+    final ids = (result['chat_ids'] as List? ?? const []);
+    for (final id in ids.whereType<int>()) {
+      final chat = await _gateway.invoke({'@type': 'getChat', 'chat_id': id});
+      _cacheChat(chat);
+    }
+
+    _emitChats();
+    return _sortedChats();
   }
 
   @override
-  Future<void> startAuthentication() {
-    // TODO: start TDLib authorization flow.
-    throw UnimplementedError('TelegramRepository.startAuthentication()');
+  Future<List<Message>> getMessages(String chatId) async {
+    await connect();
+    if (!_ready) return List.unmodifiable(_messagesByChat[chatId] ?? const []);
+
+    final id = int.tryParse(chatId);
+    if (id == null) return const [];
+
+    final result = await _gateway.invoke({
+      '@type': 'getChatHistory',
+      'chat_id': id,
+      'from_message_id': 0,
+      'offset': 0,
+      'limit': 40,
+      'only_local': false,
+    });
+
+    final rawMessages = (result['messages'] as List? ?? const [])
+        .whereType<TdJson>()
+        .toList();
+    final messages = rawMessages.map(_mapMessage).toList().reversed.toList();
+    _messagesByChat[chatId] = messages;
+    return List.unmodifiable(messages);
   }
 
   @override
-  Future<void> submitPhoneNumber(String phoneNumber) {
-    // TODO: tdlib.setAuthenticationPhoneNumber(...)
-    throw UnimplementedError('TelegramRepository.submitPhoneNumber()');
+  Future<void> markChatOpened(String chatId) async {
+    final id = int.tryParse(chatId);
+    if (id == null || !_ready) return;
+    await _gateway.invoke({
+      '@type': 'viewMessages',
+      'chat_id': id,
+      'message_ids': const [],
+      'source': null,
+      'force_read': true,
+    });
   }
 
   @override
-  Future<void> submitCode(String code) {
-    // TODO: tdlib.checkAuthenticationCode(...)
-    throw UnimplementedError('TelegramRepository.submitCode()');
+  Future<void> sendMessage(String chatId, String text) async {
+    await connect();
+    final id = int.tryParse(chatId);
+    if (id == null || !_ready) return;
+
+    final sent = await _gateway.invoke({
+      '@type': 'sendMessage',
+      'chat_id': id,
+      'message_thread_id': 0,
+      'reply_to': null,
+      'options': null,
+      'reply_markup': null,
+      'input_message_content': {
+        '@type': 'inputMessageText',
+        'text': {'@type': 'formattedText', 'text': text, 'entities': const []},
+        'link_preview_options': null,
+        'clear_draft': true,
+      },
+    });
+
+    final message = _mapMessage(sent);
+    _messagesFor(chatId).add(message);
+    _messageController.add(message);
   }
 
-  @override
-  Future<void> submitPassword(String password) {
-    // TODO: tdlib.checkAuthenticationPassword(...)
-    throw UnimplementedError('TelegramRepository.submitPassword()');
+  Future<void> _invokeAuth(TdJson request) async {
+    try {
+      await _gateway.invoke(request);
+    } catch (error) {
+      _setAuthState(_authState.copyWith(errorMessage: error.toString()));
+    }
   }
 
-  @override
-  Future<void> cancelAuthentication() {
-    // TODO: cancel local auth UI or close auth flow when supported.
-    throw UnimplementedError('TelegramRepository.cancelAuthentication()');
+  Future<void> _handleUpdate(TdJson update) async {
+    switch (update['@type']) {
+      case 'updateAuthorizationState':
+        _handleAuthorizationState(update['authorization_state'] as TdJson?);
+      case 'updateNewChat':
+        _cacheChat(update['chat'] as TdJson?);
+        _emitChats();
+      case 'updateChatLastMessage':
+        await _refreshChat(update['chat_id']);
+      case 'updateChatReadInbox':
+      case 'updateChatReadOutbox':
+      case 'updateChatUnreadMentionCount':
+      case 'updateChatPosition':
+        await _refreshChat(update['chat_id']);
+      case 'updateNewMessage':
+        final raw = update['message'];
+        if (raw is TdJson) {
+          final message = _mapMessage(raw);
+          _messagesFor(message.chatId ?? '').add(message);
+          _messageController.add(message);
+          await _refreshChat(raw['chat_id']);
+        }
+    }
   }
 
-  @override
-  Future<void> signOut() {
-    // TODO: tdlib.logOut()
-    throw UnimplementedError('TelegramRepository.signOut()');
+  Future<void> _refreshChat(Object? chatId) async {
+    if (chatId is! int || !_ready) return;
+    final chat = await _gateway.invoke({'@type': 'getChat', 'chat_id': chatId});
+    _cacheChat(chat);
+    _emitChats();
+  }
+
+  Future<void> _handleAuthorizationState(TdJson? state) async {
+    if (state == null) return;
+    switch (state['@type']) {
+      case 'authorizationStateWaitTdlibParameters':
+        await _sendTdlibParameters();
+      case 'authorizationStateWaitPhoneNumber':
+        _setAuthState(const AuthSessionState.waitPhone());
+      case 'authorizationStateWaitCode':
+        _setAuthState(_authState.copyWith(stage: AuthStage.waitCode));
+      case 'authorizationStateWaitPassword':
+        _setAuthState(_authState.copyWith(stage: AuthStage.waitPassword));
+      case 'authorizationStateReady':
+        _ready = true;
+        _setAuthState(const AuthSessionState.ready());
+        unawaited(getChats());
+      case 'authorizationStateLoggingOut':
+      case 'authorizationStateClosing':
+        _setAuthState(_authState.copyWith(isLoading: true));
+      case 'authorizationStateClosed':
+        _ready = false;
+        _setAuthState(const AuthSessionState.signedOut());
+    }
+  }
+
+  Future<void> _sendTdlibParameters() async {
+    final supportDir = await getApplicationSupportDirectory();
+    final baseDir = Directory('${supportDir.path}/tdlib');
+    final filesDir = Directory('${baseDir.path}/files');
+    await baseDir.create(recursive: true);
+    await filesDir.create(recursive: true);
+
+    await _gateway.invoke({
+      '@type': 'setTdlibParameters',
+      'use_test_dc': false,
+      'database_directory': baseDir.path,
+      'files_directory': filesDir.path,
+      'database_encryption_key': '',
+      'use_file_database': true,
+      'use_chat_info_database': true,
+      'use_message_database': true,
+      'use_secret_chats': false,
+      'api_id': apiId,
+      'api_hash': apiHash,
+      'system_language_code': 'en',
+      'device_model': 'Android',
+      'system_version': Platform.operatingSystemVersion,
+      'application_version': '0.1.1',
+    });
+  }
+
+  void _cacheChat(TdJson? raw) {
+    if (raw == null) return;
+    final summary = _mapChat(raw);
+    _chatsById[summary.id] = summary;
+  }
+
+  ChatSummary _mapChat(TdJson raw) {
+    final id = raw['id'] as int;
+    final lastMessage = raw['last_message'] as TdJson?;
+    final lastDate = _dateFromUnix(lastMessage?['date']);
+    final isPinned = _isPinned(raw['positions']);
+    final isChannel = _isChannel(raw['type']);
+
+    return ChatSummary(
+      id: id.toString(),
+      title: (raw['title'] as String?)?.trim().isNotEmpty == true
+          ? raw['title'] as String
+          : 'Telegram chat',
+      type: isChannel
+          ? ChatType.channel
+          : _isGroup(raw['type'])
+          ? ChatType.group
+          : ChatType.direct,
+      updatedAt: lastDate ?? DateTime.fromMillisecondsSinceEpoch(0),
+      participants: const [],
+      lastMessagePreview: _messagePreview(lastMessage),
+      avatarLabel: _initials(raw['title'] as String?),
+      pinnedAt: isPinned ? DateTime.now() : null,
+      lastIncomingAt: _isOutgoing(lastMessage) ? null : lastDate,
+      lastOutgoingAt: _isOutgoing(lastMessage) ? lastDate : null,
+      unreadCount: raw['unread_count'] as int? ?? 0,
+    );
+  }
+
+  Message _mapMessage(TdJson raw) {
+    final outgoing = raw['is_outgoing'] == true;
+    return Message(
+      id: (raw['id'] as int?)?.toString(),
+      chatId: (raw['chat_id'] as int?)?.toString(),
+      sender: outgoing ? Sender.ren : Sender.ann,
+      text: _messagePreview(raw),
+      createdAt: _dateFromUnix(raw['date']),
+      status: outgoing
+          ? MessageDeliveryStatus.sent
+          : MessageDeliveryStatus.delivered,
+    );
+  }
+
+  List<Message> _messagesFor(String chatId) {
+    return _messagesByChat.putIfAbsent(chatId, () => <Message>[]);
+  }
+
+  List<ChatSummary> _sortedChats() {
+    final sorted = _chatsById.values.toList();
+    sorted.sort((a, b) {
+      if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+      return b.updatedAt.compareTo(a.updatedAt);
+    });
+    return List.unmodifiable(sorted);
+  }
+
+  void _emitChats() {
+    if (!_chatController.isClosed) _chatController.add(_sortedChats());
+  }
+
+  void _setAuthState(AuthSessionState state) {
+    _authState = state;
+    if (!_authController.isClosed) _authController.add(state);
+  }
+
+  DateTime? _dateFromUnix(Object? value) {
+    if (value is! int || value <= 0) return null;
+    return DateTime.fromMillisecondsSinceEpoch(value * 1000);
+  }
+
+  String _messagePreview(TdJson? message) {
+    final content = message?['content'];
+    if (content is! TdJson) return '';
+    return switch (content['@type']) {
+      'messageText' => (content['text'] as TdJson?)?['text'] as String? ?? '',
+      'messagePhoto' => 'Photo',
+      'messageAnimation' => 'GIF',
+      'messageSticker' => 'Sticker',
+      'messageDocument' => 'File',
+      'messageVideo' => 'Video',
+      'messageVoiceNote' => 'Voice message',
+      _ => 'Message',
+    };
+  }
+
+  bool _isOutgoing(TdJson? message) => message?['is_outgoing'] == true;
+
+  bool _isPinned(Object? positions) {
+    if (positions is! List) return false;
+    return positions.whereType<TdJson>().any((position) {
+      return position['is_pinned'] == true;
+    });
+  }
+
+  bool _isGroup(Object? type) {
+    if (type is! TdJson) return false;
+    return switch (type['@type']) {
+      'chatTypeBasicGroup' || 'chatTypeSupergroup' => true,
+      _ => false,
+    };
+  }
+
+  bool _isChannel(Object? type) {
+    if (type is! TdJson) return false;
+    return type['@type'] == 'chatTypeSupergroup' && type['is_channel'] == true;
+  }
+
+  String _initials(String? title) {
+    final trimmed = title?.trim() ?? '';
+    if (trimmed.isEmpty) return 'TG';
+    final words = trimmed.split(RegExp(r'\s+'));
+    if (words.length == 1) return words.first.substring(0, 1).toUpperCase();
+    return '${words[0][0]}${words[1][0]}'.toUpperCase();
   }
 }
