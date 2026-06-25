@@ -78,9 +78,9 @@ class _AuthScreenState extends State<AuthScreen> {
         await widget.repository.cancelAuthentication();
         widget.onCancel();
       case AuthStage.waitCode:
-        _moveTo(AuthStage.waitPhone);
+        await widget.repository.cancelAuthentication();
       case AuthStage.waitPassword:
-        _moveTo(AuthStage.waitCode);
+        await widget.repository.cancelAuthentication();
       case AuthStage.signedOut:
       case AuthStage.ready:
         widget.onCancel();
@@ -89,14 +89,6 @@ class _AuthScreenState extends State<AuthScreen> {
 
   Future<void> _skipPassword() async {
     await widget.repository.submitPassword('');
-  }
-
-  void _moveTo(AuthStage step) {
-    setState(() {
-      _direction = _stepIndex(step) > _stepIndex(_step) ? 1 : -1;
-      _authState = _authState.copyWith(stage: step, clearError: true);
-      _controller.clear();
-    });
   }
 
   void _setAuthState(AuthSessionState state) {
@@ -214,20 +206,30 @@ class _AuthPanel extends StatelessWidget {
   };
 
   String get _hint => switch (step) {
-    AuthStage.waitPhone => '+1 555 000 0000',
-    AuthStage.waitCode => '00000',
-    AuthStage.waitPassword => 'Password',
-    AuthStage.signedOut => '+1 555 000 0000',
+    AuthStage.waitPhone => '+COUNTRY CODE NUMBER',
+    AuthStage.waitCode => 'LOGIN CODE',
+    AuthStage.waitPassword => '2FA PASSWORD',
+    AuthStage.signedOut => '+COUNTRY CODE NUMBER',
     AuthStage.ready => '',
   };
 
-  String get _caption => switch (step) {
-    AuthStage.waitPhone => 'CONNECT YOUR TELEGRAM ACCOUNT',
-    AuthStage.waitCode => 'ENTER THE CODE FROM TELEGRAM',
-    AuthStage.waitPassword => 'ONLY IF TWO-STEP VERIFICATION IS ON',
-    AuthStage.signedOut => 'CONNECT YOUR TELEGRAM ACCOUNT',
-    AuthStage.ready => 'SESSION READY',
-  };
+  String get _caption {
+    if (step == AuthStage.waitCode) {
+      final delivery = state.codeDeliveryMessage ?? 'ENTER THE CODE';
+      final phone = state.phoneNumber?.trim();
+      if (phone != null && phone.isNotEmpty) {
+        return '$delivery\n$phone';
+      }
+      return delivery;
+    }
+    return switch (step) {
+      AuthStage.waitPhone => 'CONNECT YOUR TELEGRAM ACCOUNT',
+      AuthStage.waitCode => 'ENTER THE CODE FROM TELEGRAM',
+      AuthStage.waitPassword => 'ONLY IF TWO-STEP VERIFICATION IS ON',
+      AuthStage.signedOut => 'CONNECT YOUR TELEGRAM ACCOUNT',
+      AuthStage.ready => 'SESSION READY',
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -253,6 +255,8 @@ class _AuthPanel extends StatelessWidget {
                 ),
                 Text(
                   _caption,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white60,
                     fontFamily: 'OptimaNova',

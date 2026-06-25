@@ -58,6 +58,17 @@ class TdlibGateway {
     TdPlugin.instance.tdSend(_clientId, jsonEncode(request));
   }
 
+  Future<void> resetClient() async {
+    await initialize();
+    for (final completer in _pending.values) {
+      if (!completer.isCompleted) {
+        completer.completeError(StateError('TDLib client reset'));
+      }
+    }
+    _pending.clear();
+    _clientId = TdPlugin.instance.tdCreateClientId();
+  }
+
   Future<void> close() async {
     if (_initialized && _running) {
       send({'@type': 'close'});
@@ -87,12 +98,36 @@ class TdlibGateway {
       if (extra is int && _pending.containsKey(extra)) {
         final completer = _pending.remove(extra);
         if (completer != null && !completer.isCompleted) {
-          completer.complete(decoded);
+          if (decoded['@type'] == 'error') {
+            completer.completeError(TdlibException.fromJson(decoded));
+          } else {
+            completer.complete(decoded);
+          }
         }
         continue;
       }
 
       _updates.add(decoded);
     }
+  }
+}
+
+class TdlibException implements Exception {
+  final int? code;
+  final String message;
+
+  const TdlibException({required this.message, this.code});
+
+  factory TdlibException.fromJson(TdJson json) {
+    return TdlibException(
+      code: json['code'] as int?,
+      message: json['message'] as String? ?? 'TDLib error',
+    );
+  }
+
+  @override
+  String toString() {
+    if (code == null) return message;
+    return '$message ($code)';
   }
 }

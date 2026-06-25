@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'models/auth_session.dart';
 import 'models/chat_summary.dart';
 import 'models/message.dart';
 import 'services/chat_repository.dart';
@@ -69,9 +70,11 @@ class _RootShell extends StatefulWidget {
 class _RootShellState extends State<_RootShell> {
   static const _particleModeKey = 'settings.particleMode';
   static const _transitionsKey = 'settings.transitionAnimationsEnabled';
+  static const _useTelegramBackend = bool.fromEnvironment('USE_TELEGRAM');
 
   late final ChatRepository _chatRepo;
-  bool _showAuth = false;
+  StreamSubscription<AuthSessionState>? _authSub;
+  bool _showAuth = _useTelegramBackend;
   PersonaParticleMode _particleMode = PersonaParticleMode.spring;
   bool _transitionAnimationsEnabled = true;
 
@@ -80,13 +83,24 @@ class _RootShellState extends State<_RootShell> {
     super.initState();
     _chatRepo = _createRepository();
     _chatRepo.connect();
+    if (_useTelegramBackend) {
+      _authSub = _chatRepo.authState.listen(_syncTelegramAuthState);
+    }
     _loadSettings();
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _chatRepo.disconnect();
     super.dispose();
+  }
+
+  void _syncTelegramAuthState(AuthSessionState state) {
+    if (!mounted) return;
+    final shouldShowAuth = !state.isReady;
+    if (_showAuth == shouldShowAuth) return;
+    setState(() => _showAuth = shouldShowAuth);
   }
 
   void _openChat(BuildContext context, ChatSummary chat) {
@@ -169,8 +183,7 @@ class _RootShellState extends State<_RootShell> {
   }
 
   ChatRepository _createRepository() {
-    const useTelegram = bool.fromEnvironment('USE_TELEGRAM');
-    if (!useTelegram) return MockChatRepository();
+    if (!_useTelegramBackend) return MockChatRepository();
 
     const apiId = int.fromEnvironment('TG_API_ID');
     const apiHash = String.fromEnvironment('TG_API_HASH');
@@ -207,7 +220,9 @@ class _RootShellState extends State<_RootShell> {
               key: const ValueKey('auth'),
               repository: _chatRepo,
               onAuthenticated: () => setState(() => _showAuth = false),
-              onCancel: () => setState(() => _showAuth = false),
+              onCancel: () => setState(() {
+                _showAuth = _useTelegramBackend;
+              }),
             )
           : ChatListScreen(
               key: const ValueKey('chat_list'),

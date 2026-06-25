@@ -115,7 +115,28 @@ class TelegramRepository implements ChatRepository {
 
   @override
   Future<void> cancelAuthentication() async {
-    _setAuthState(_authState.copyWith(clearError: true));
+    if (_connected) {
+      try {
+        _gateway.send({'@type': 'destroy'});
+      } catch (_) {
+        // The client may already be closed; resetting below creates a fresh one.
+      }
+    }
+
+    await _updatesSub?.cancel();
+    _updatesSub = null;
+    _ready = false;
+    _connected = false;
+    _chatsById.clear();
+    _messagesByChat.clear();
+    _emitChats();
+    _setAuthState(
+      const AuthSessionState.waitPhone().copyWith(clearCodeDelivery: true),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    await _gateway.resetClient();
+    unawaited(connect());
   }
 
   @override
@@ -214,7 +235,7 @@ class TelegramRepository implements ChatRepository {
     try {
       await _gateway.invoke(request);
     } catch (error) {
-      _setAuthState(_authState.copyWith(errorMessage: error.toString()));
+      _setAuthState(_authState.copyWith(errorMessage: _authErrorText(error)));
     }
   }
 
@@ -256,9 +277,20 @@ class TelegramRepository implements ChatRepository {
       case 'authorizationStateWaitTdlibParameters':
         await _sendTdlibParameters();
       case 'authorizationStateWaitPhoneNumber':
-        _setAuthState(const AuthSessionState.waitPhone());
+        _setAuthState(
+          const AuthSessionState.waitPhone().copyWith(
+            clearCodeDelivery: true,
+          ),
+        );
       case 'authorizationStateWaitCode':
-        _setAuthState(_authState.copyWith(stage: AuthStage.waitCode));
+        final codeInfo = state['code_info'] as TdJson?;
+        _setAuthState(
+          _authState.copyWith(
+            stage: AuthStage.waitCode,
+            phoneNumber: codeInfo?['phone_number'] as String?,
+            codeDeliveryMessage: _codeDeliveryMessage(codeInfo),
+          ),
+        );
       case 'authorizationStateWaitPassword':
         _setAuthState(_authState.copyWith(stage: AuthStage.waitPassword));
       case 'authorizationStateReady':
@@ -388,6 +420,46 @@ class TelegramRepository implements ChatRepository {
       'messageVoiceNote' => 'Voice message',
       _ => 'Message',
     };
+  }
+
+  String? _codeDeliveryMessage(TdJson? codeInfo) {
+    if (codeInfo == null) return null;
+    final type = _codeTypeLabel(codeInfo['type'] as TdJson?) ?? 'CODE REQUESTED';
+    final nextType = _codeTypeLabel(codeInfo['next_type'] as TdJson?);
+    final timeout = codeInfo['timeout'];
+    final resend = nextType == null || timeout is! int || timeout <= 0
+        ? ''
+        : ' / $nextType IN ${_formatSeconds(timeout)}';
+    return '$type$resend';
+  }
+
+  String _authErrorText(Object error) {
+    final text = error.toString();
+    if (text.contains('PHONE_CODE_INVALID')) return 'WRONG CODE';
+    if (text.contains('PHONE_CODE_EXPIRED')) return 'CODE EXPIRED';
+    if (text.contains('PHONE_NUMBER_INVALID')) return 'WRONG PHONE NUMBER';
+    if (text.contains('PASSWORD_HASH_INVALID')) return 'WRONG PASSWORD';
+    if (text.contains('FLOOD_WAIT')) return 'TOO MANY TRIES. WAIT A BIT';
+    return text.toUpperCase();
+  }
+
+  String? _codeTypeLabel(TdJson? type) {
+    return switch (type?['@type']) {
+      'authenticationCodeTypeTelegramMessage' => 'CODE SENT TO TELEGRAM',
+      'authenticationCodeTypeSms' => 'CODE SENT BY SMS',
+      'authenticationCodeTypeCall' => 'CODE SENT BY CALL',
+      'authenticationCodeTypeFlashCall' => 'WAITING FOR FLASH CALL',
+      'authenticationCodeTypeMissedCall' => 'WAITING FOR MISSED CALL',
+      'authenticationCodeTypeFragment' => 'CODE SENT TO FRAGMENT',
+      _ => null,
+    };
+  }
+
+  String _formatSeconds(int seconds) {
+    final minutes = seconds ~/ 60;
+    final rest = seconds % 60;
+    if (minutes == 0) return '${rest}s';
+    return '${minutes}m ${rest.toString().padLeft(2, '0')}s';
   }
 
   bool _isOutgoing(TdJson? message) => message?['is_outgoing'] == true;
