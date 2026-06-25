@@ -193,6 +193,7 @@ class _RootShellState extends State<_RootShell> {
       child: _showAuth
           ? AuthScreen(
               key: const ValueKey('auth'),
+              repository: _chatRepo,
               onAuthenticated: () => setState(() => _showAuth = false),
               onCancel: () => setState(() => _showAuth = false),
             )
@@ -228,41 +229,64 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
-  late final TranscriptState _transcriptState;
+  TranscriptState? _transcriptState;
   StreamSubscription<Message>? _incomingSub;
 
   @override
   void initState() {
     super.initState();
-
-    _transcriptState = TranscriptState(vsync: this, messages: kMessages);
-    _transcriptState.advance();
-    unawaited(widget.repository.markChatOpened(widget.chat.id));
+    _loadTranscript();
 
     _incomingSub = widget.repository.incomingMessages.listen((msg) {
-      _transcriptState.addMessage(msg);
+      if (msg.chatId == widget.chat.id) {
+        _transcriptState?.addMessage(msg);
+      }
     });
   }
 
   @override
   void dispose() {
     _incomingSub?.cancel();
-    _transcriptState.dispose();
+    _transcriptState?.dispose();
     super.dispose();
   }
 
+  Future<void> _loadTranscript() async {
+    final messages = await widget.repository.getMessages(widget.chat.id);
+    if (!mounted) return;
+
+    final state = TranscriptState(vsync: this, messages: messages);
+    state.advance();
+    setState(() => _transcriptState = state);
+    unawaited(widget.repository.markChatOpened(widget.chat.id));
+  }
+
   void _onSend(String text) {
-    _transcriptState.addMessage(Message(sender: Sender.ren, text: text));
-    widget.repository.sendMessage(widget.chat.id, text);
+    final state = _transcriptState;
+    if (state == null) return;
+
+    state.addMessage(
+      Message(
+        chatId: widget.chat.id,
+        sender: Sender.ren,
+        text: text,
+        createdAt: DateTime.now(),
+        status: MessageDeliveryStatus.sent,
+      ),
+    );
+    unawaited(widget.repository.sendMessage(widget.chat.id, text));
   }
 
   void _onSendImage(String path) {
-    _transcriptState.addMessage(Message(sender: Sender.ren, imagePath: path));
+    _transcriptState?.addMessage(
+      Message(sender: Sender.ren, chatId: widget.chat.id, imagePath: path),
+    );
   }
 
   void _onSendFile(String path, String name, int size) {
-    _transcriptState.addMessage(
+    _transcriptState?.addMessage(
       Message(
+        chatId: widget.chat.id,
         sender: Sender.ren,
         filePath: path,
         fileName: name,
@@ -272,15 +296,21 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   }
 
   void _onSendSticker(String path) {
-    _transcriptState.addMessage(Message(sender: Sender.ren, stickerPath: path));
+    _transcriptState?.addMessage(
+      Message(sender: Sender.ren, chatId: widget.chat.id, stickerPath: path),
+    );
   }
 
   void _onSendGif(String path) {
-    _transcriptState.addMessage(Message(sender: Sender.ren, gifPath: path));
+    _transcriptState?.addMessage(
+      Message(sender: Sender.ren, chatId: widget.chat.id, gifPath: path),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final transcriptState = _transcriptState;
+
     // Best-effort mapping from the chat's participants back to the hardcoded
     // [Sender] enum so the existing ChatHeader can render its avatar strip.
     // Real Telegram data won't line up with these faces; this just keeps the
@@ -298,10 +328,13 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
           Positioned.fill(
             child: BackgroundParticles(season: widget.particleSeason),
           ),
-          GestureDetector(
-            onTap: _transcriptState.advanceAfterTyping,
-            child: Transcript(state: _transcriptState),
-          ),
+          if (transcriptState == null)
+            const Center(child: CircularProgressIndicator(color: Colors.white))
+          else
+            GestureDetector(
+              onTap: transcriptState.advanceAfterTyping,
+              child: Transcript(state: transcriptState),
+            ),
 
           Align(
             alignment: Alignment.topCenter,
@@ -314,17 +347,19 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
           Align(
             alignment: Alignment.bottomCenter,
-            child: AnimatedBuilder(
-              animation: _transcriptState,
-              builder: (context, _) => InputBar(
-                showTypingIndicator: _transcriptState.isSomeoneTyping,
-                onSend: _onSend,
-                onSendImage: _onSendImage,
-                onSendFile: _onSendFile,
-                onSendSticker: _onSendSticker,
-                onSendGif: _onSendGif,
-              ),
-            ),
+            child: transcriptState == null
+                ? const SizedBox.shrink()
+                : AnimatedBuilder(
+                    animation: transcriptState,
+                    builder: (context, _) => InputBar(
+                      showTypingIndicator: transcriptState.isSomeoneTyping,
+                      onSend: _onSend,
+                      onSendImage: _onSendImage,
+                      onSendFile: _onSendFile,
+                      onSendSticker: _onSendSticker,
+                      onSendGif: _onSendGif,
+                    ),
+                  ),
           ),
         ],
       ),

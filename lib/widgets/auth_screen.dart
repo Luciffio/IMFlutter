@@ -1,15 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-enum _AuthStep { phone, code, password }
+import '../models/auth_session.dart';
+import '../services/chat_repository.dart';
 
 class AuthScreen extends StatefulWidget {
+  final ChatRepository repository;
   final VoidCallback onAuthenticated;
   final VoidCallback onCancel;
 
   const AuthScreen({
     super.key,
+    required this.repository,
     required this.onAuthenticated,
     required this.onCancel,
   });
@@ -20,33 +25,108 @@ class AuthScreen extends StatefulWidget {
 
 class _AuthScreenState extends State<AuthScreen> {
   final _controller = TextEditingController();
-  _AuthStep _step = _AuthStep.phone;
+  StreamSubscription<AuthSessionState>? _authSub;
+  AuthSessionState _authState = const AuthSessionState.waitPhone();
   int _direction = 1;
+
+  AuthStage get _step {
+    return switch (_authState.stage) {
+      AuthStage.waitCode => AuthStage.waitCode,
+      AuthStage.waitPassword => AuthStage.waitPassword,
+      _ => AuthStage.waitPhone,
+    };
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _authSub = widget.repository.authState.listen(_setAuthState);
+    unawaited(_startAuth());
+  }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     _controller.dispose();
     super.dispose();
   }
 
-  void _continue() {
+  Future<void> _startAuth() async {
+    await widget.repository.startAuthentication();
+    final state = await widget.repository.getAuthState();
+    if (mounted) _setAuthState(state);
+  }
+
+  Future<void> _continue() async {
     if (_controller.text.trim().isEmpty) return;
     switch (_step) {
-      case _AuthStep.phone:
-        _moveTo(_AuthStep.code);
-      case _AuthStep.code:
-        _moveTo(_AuthStep.password);
-      case _AuthStep.password:
-        widget.onAuthenticated();
+      case AuthStage.waitPhone:
+        await widget.repository.submitPhoneNumber(_controller.text);
+      case AuthStage.waitCode:
+        await widget.repository.submitCode(_controller.text);
+      case AuthStage.waitPassword:
+        await widget.repository.submitPassword(_controller.text);
+      case AuthStage.signedOut:
+      case AuthStage.ready:
+        break;
     }
   }
 
-  void _moveTo(_AuthStep step) {
+  Future<void> _back() async {
+    switch (_step) {
+      case AuthStage.waitPhone:
+        await widget.repository.cancelAuthentication();
+        widget.onCancel();
+      case AuthStage.waitCode:
+        _moveTo(AuthStage.waitPhone);
+      case AuthStage.waitPassword:
+        _moveTo(AuthStage.waitCode);
+      case AuthStage.signedOut:
+      case AuthStage.ready:
+        widget.onCancel();
+    }
+  }
+
+  Future<void> _skipPassword() async {
+    await widget.repository.submitPassword('');
+  }
+
+  void _moveTo(AuthStage step) {
     setState(() {
-      _direction = step.index > _step.index ? 1 : -1;
-      _step = step;
+      _direction = _stepIndex(step) > _stepIndex(_step) ? 1 : -1;
+      _authState = _authState.copyWith(stage: step, clearError: true);
       _controller.clear();
     });
+  }
+
+  void _setAuthState(AuthSessionState state) {
+    if (!mounted) return;
+    if (state.isReady) {
+      widget.onAuthenticated();
+      return;
+    }
+
+    final nextStep = switch (state.stage) {
+      AuthStage.waitCode => AuthStage.waitCode,
+      AuthStage.waitPassword => AuthStage.waitPassword,
+      _ => AuthStage.waitPhone,
+    };
+
+    setState(() {
+      _direction = _stepIndex(nextStep) >= _stepIndex(_step) ? 1 : -1;
+      _authState = state;
+      _controller.clear();
+    });
+  }
+
+  int _stepIndex(AuthStage step) {
+    return switch (step) {
+      AuthStage.waitPhone => 0,
+      AuthStage.waitCode => 1,
+      AuthStage.waitPassword => 2,
+      AuthStage.signedOut => 0,
+      AuthStage.ready => 3,
+    };
   }
 
   @override
@@ -89,13 +169,12 @@ class _AuthScreenState extends State<AuthScreen> {
                   child: _AuthPanel(
                     key: ValueKey(_step),
                     step: _step,
+                    state: _authState,
                     controller: _controller,
                     onContinue: _continue,
-                    onBack: _step == _AuthStep.phone
-                        ? widget.onCancel
-                        : () => _moveTo(_AuthStep.values[_step.index - 1]),
-                    onSkipPassword: _step == _AuthStep.password
-                        ? widget.onAuthenticated
+                    onBack: _back,
+                    onSkipPassword: _step == AuthStage.waitPassword
+                        ? _skipPassword
                         : null,
                   ),
                 ),
@@ -109,15 +188,17 @@ class _AuthScreenState extends State<AuthScreen> {
 }
 
 class _AuthPanel extends StatelessWidget {
-  final _AuthStep step;
+  final AuthStage step;
+  final AuthSessionState state;
   final TextEditingController controller;
-  final VoidCallback onContinue;
-  final VoidCallback? onBack;
-  final VoidCallback? onSkipPassword;
+  final Future<void> Function() onContinue;
+  final Future<void> Function()? onBack;
+  final Future<void> Function()? onSkipPassword;
 
   const _AuthPanel({
     super.key,
     required this.step,
+    required this.state,
     required this.controller,
     required this.onContinue,
     required this.onBack,
@@ -125,21 +206,27 @@ class _AuthPanel extends StatelessWidget {
   });
 
   String get _title => switch (step) {
-    _AuthStep.phone => 'YOUR NUMBER',
-    _AuthStep.code => 'THE CODE',
-    _AuthStep.password => '2FA PASSWORD',
+    AuthStage.waitPhone => 'YOUR NUMBER',
+    AuthStage.waitCode => 'THE CODE',
+    AuthStage.waitPassword => '2FA PASSWORD',
+    AuthStage.signedOut => 'YOUR NUMBER',
+    AuthStage.ready => 'CONNECTED',
   };
 
   String get _hint => switch (step) {
-    _AuthStep.phone => '+1 555 000 0000',
-    _AuthStep.code => '00000',
-    _AuthStep.password => 'Password',
+    AuthStage.waitPhone => '+1 555 000 0000',
+    AuthStage.waitCode => '00000',
+    AuthStage.waitPassword => 'Password',
+    AuthStage.signedOut => '+1 555 000 0000',
+    AuthStage.ready => '',
   };
 
   String get _caption => switch (step) {
-    _AuthStep.phone => 'CONNECT YOUR TELEGRAM ACCOUNT',
-    _AuthStep.code => 'ENTER THE CODE FROM TELEGRAM',
-    _AuthStep.password => 'ONLY IF TWO-STEP VERIFICATION IS ON',
+    AuthStage.waitPhone => 'CONNECT YOUR TELEGRAM ACCOUNT',
+    AuthStage.waitCode => 'ENTER THE CODE FROM TELEGRAM',
+    AuthStage.waitPassword => 'ONLY IF TWO-STEP VERIFICATION IS ON',
+    AuthStage.signedOut => 'CONNECT YOUR TELEGRAM ACCOUNT',
+    AuthStage.ready => 'SESSION READY',
   };
 
   @override
@@ -181,14 +268,14 @@ class _AuthPanel extends StatelessWidget {
                     child: TextField(
                       controller: controller,
                       autofocus: true,
-                      obscureText: step == _AuthStep.password,
-                      keyboardType: step == _AuthStep.password
+                      obscureText: step == AuthStage.waitPassword,
+                      keyboardType: step == AuthStage.waitPassword
                           ? TextInputType.visiblePassword
                           : TextInputType.phone,
-                      inputFormatters: step == _AuthStep.code
+                      inputFormatters: step == AuthStage.waitCode
                           ? [FilteringTextInputFormatter.digitsOnly]
                           : null,
-                      onSubmitted: (_) => onContinue(),
+                      onSubmitted: (_) => unawaited(onContinue()),
                       style: const TextStyle(
                         color: Colors.black,
                         fontFamily: 'OptimaNova',
@@ -207,18 +294,31 @@ class _AuthPanel extends StatelessWidget {
                     ),
                   ),
                 ),
+                if (state.errorMessage != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(
+                      state.errorMessage!,
+                      style: const TextStyle(
+                        color: Color(0xFFF70000),
+                        fontFamily: 'OptimaNova',
+                        fontSize: 11,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
                 const Spacer(),
                 Row(
                   children: [
                     if (onBack != null)
                       IconButton(
                         tooltip: 'Back',
-                        onPressed: onBack,
+                        onPressed: () => unawaited(onBack!()),
                         icon: const Icon(Icons.arrow_back, color: Colors.white),
                       ),
                     if (onSkipPassword != null)
                       TextButton(
-                        onPressed: onSkipPassword,
+                        onPressed: () => unawaited(onSkipPassword!()),
                         child: const Text(
                           'SKIP',
                           style: TextStyle(
@@ -242,20 +342,20 @@ class _AuthPanel extends StatelessWidget {
 }
 
 class _ContinueButton extends StatelessWidget {
-  final VoidCallback onTap;
+  final Future<void> Function() onTap;
 
   const _ContinueButton({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: onTap,
+      onTap: () => unawaited(onTap()),
       child: CustomPaint(
         painter: const _ContinueButtonPainter(),
-        child: const SizedBox(
+        child: SizedBox(
           width: 126,
           height: 46,
-          child: Row(
+          child: const Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(

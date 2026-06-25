@@ -1,3 +1,4 @@
+import '../models/auth_session.dart';
 import '../models/chat_summary.dart';
 import '../models/message.dart';
 
@@ -11,6 +12,14 @@ abstract class ChatRepository {
 
   /// Stream of messages received from other participants.
   Stream<Message> get incomingMessages;
+
+  /// Live chat list updates. Backends should emit whenever unread counts,
+  /// ordering, pinned state, previews, or activity changes.
+  Stream<List<ChatSummary>> get chats;
+
+  /// Authentication/session updates. Telegram will map TDLib authorization
+  /// states into this stream.
+  Stream<AuthSessionState> get authState;
 
   /// Establish connection to the backend (auth, subscribe to updates, etc.)
   Future<void> connect();
@@ -28,4 +37,20 @@ abstract class ChatRepository {
 
   /// Mark a chat as opened/read from the app's point of view.
   Future<void> markChatOpened(String chatId);
+
+  /// Current authentication/session state.
+  Future<AuthSessionState> getAuthState();
+
+  /// Start or resume the login flow.
+  Future<void> startAuthentication();
+
+  Future<void> submitPhoneNumber(String phoneNumber);
+
+  Future<void> submitCode(String code);
+
+  Future<void> submitPassword(String password);
+
+  Future<void> cancelAuthentication();
+
+  Future<void> signOut();
 }

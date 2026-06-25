@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'dart:async';
 import '../models/chat_summary.dart';
 import '../services/chat_repository.dart';
 import '../theme/persona_colors.dart';
@@ -40,22 +41,30 @@ class _ChatListScreenState extends State<ChatListScreen> {
   String? _selectedChatId;
   _ChatSection _section = _ChatSection.chats;
   late final PageController _pageController;
+  StreamSubscription<List<ChatSummary>>? _chatSub;
 
   @override
   void initState() {
     super.initState();
     _pageController = PageController();
+    _chatSub = widget.repository.chats.listen(_setChats);
     _loadChats();
   }
 
   @override
   void dispose() {
+    _chatSub?.cancel();
     _pageController.dispose();
     super.dispose();
   }
 
   Future<void> _loadChats() async {
     final chats = await widget.repository.getChats();
+    if (!mounted) return;
+    _setChats(chats);
+  }
+
+  void _setChats(List<ChatSummary> chats) {
     if (!mounted) return;
     setState(() {
       _chats = chats;

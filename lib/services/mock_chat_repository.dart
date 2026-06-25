@@ -1,67 +1,155 @@
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../models/auth_session.dart';
 import '../models/chat_summary.dart';
 import '../models/message.dart';
 import 'chat_repository.dart';
 
-/// No-op stub — used until the real Telegram backend is wired up.
+/// In-memory backend used until Telegram is wired in.
 ///
-/// Sent messages are rendered locally by [TranscriptState.addMessage] before
-/// this is called, so this only needs to forward them to a real server once
-/// [TelegramRepository] is swapped in.
+/// It keeps mutable chat state, per-chat histories, and emits live chat-list
+/// updates so the UI already behaves like it is backed by a real service.
 class MockChatRepository implements ChatRepository {
-  final _controller = StreamController<Message>.broadcast();
+  final _messageController = StreamController<Message>.broadcast();
+  final _chatController = StreamController<List<ChatSummary>>.broadcast();
+  final _authController = StreamController<AuthSessionState>.broadcast();
+
+  final _messagesByChat = <String, List<Message>>{};
+  var _chats = <ChatSummary>[];
+  var _authState = const AuthSessionState.ready();
+  var _messageSerial = 0;
+  bool _connected = false;
 
   @override
-  Stream<Message> get incomingMessages => _controller.stream;
+  Stream<Message> get incomingMessages => _messageController.stream;
+
+  @override
+  Stream<List<ChatSummary>> get chats => _chatController.stream;
+
+  @override
+  Stream<AuthSessionState> get authState => _authController.stream;
 
   @override
   Future<void> connect() async {
-    // TODO: initialise TDLib / open Telegram session
+    if (_connected) return;
+    _connected = true;
+    _seed();
+    _emitAuth();
+    _emitChats();
   }
 
   @override
   Future<void> sendMessage(String chatId, String text) async {
-    // TODO: forward to Telegram via MTProto
-    // The message is already shown locally — nothing to do here yet.
+    final sentAt = DateTime.now();
+    final message = Message(
+      id: _nextMessageId(),
+      chatId: chatId,
+      sender: Sender.ren,
+      text: text,
+      createdAt: sentAt,
+      status: MessageDeliveryStatus.sent,
+    );
+
+    _messagesFor(chatId).add(message);
+    _updateChat(
+      chatId,
+      (chat) => chat.copyWith(
+        updatedAt: sentAt,
+        lastMessagePreview: _previewFor(message),
+        lastOutgoingAt: sentAt,
+        unreadCount: 0,
+      ),
+    );
+    _emitChats();
   }
 
   @override
   Future<void> disconnect() async {
-    await _controller.close();
-  }
-
-  @override
-  Future<List<Message>> getMessages(String chatId) async {
-    return kMessages
-        .map(
-          (message) => Message(
-            id: message.id,
-            chatId: chatId,
-            sender: message.sender,
-            text: message.text,
-            createdAt: message.createdAt,
-            status: message.status,
-            imagePath: message.imagePath,
-            stickerPath: message.stickerPath,
-            gifPath: message.gifPath,
-            filePath: message.filePath,
-            fileName: message.fileName,
-            fileSize: message.fileSize,
-          ),
-        )
-        .toList(growable: false);
-  }
-
-  @override
-  Future<void> markChatOpened(String chatId) async {
-    // TODO: persist read state once chats are mutable/live.
+    await _messageController.close();
+    await _chatController.close();
+    await _authController.close();
   }
 
   @override
   Future<List<ChatSummary>> getChats() async {
-    // P5-themed placeholders.  Each chat reuses bundled portraits so the
-    // avatar badges render with real faces until Telegram contacts are wired.
+    if (!_connected) await connect();
+    return _sortedChats();
+  }
+
+  @override
+  Future<List<Message>> getMessages(String chatId) async {
+    if (!_connected) await connect();
+    return List.unmodifiable(_messagesFor(chatId));
+  }
+
+  @override
+  Future<void> markChatOpened(String chatId) async {
+    _updateChat(chatId, (chat) => chat.copyWith(unreadCount: 0));
+    _emitChats();
+  }
+
+  @override
+  Future<AuthSessionState> getAuthState() async {
+    return _authState;
+  }
+
+  @override
+  Future<void> startAuthentication() async {
+    _setAuthState(const AuthSessionState.waitPhone());
+  }
+
+  @override
+  Future<void> submitPhoneNumber(String phoneNumber) async {
+    final value = phoneNumber.trim();
+    if (value.isEmpty) {
+      _setAuthState(
+        _authState.copyWith(
+          stage: AuthStage.waitPhone,
+          errorMessage: 'ENTER PHONE NUMBER',
+        ),
+      );
+      return;
+    }
+
+    _setAuthState(
+      AuthSessionState(stage: AuthStage.waitCode, phoneNumber: value),
+    );
+  }
+
+  @override
+  Future<void> submitCode(String code) async {
+    final value = code.trim();
+    if (value.isEmpty) {
+      _setAuthState(
+        _authState.copyWith(
+          stage: AuthStage.waitCode,
+          errorMessage: 'ENTER CODE',
+        ),
+      );
+      return;
+    }
+
+    _setAuthState(_authState.copyWith(stage: AuthStage.waitPassword));
+  }
+
+  @override
+  Future<void> submitPassword(String password) async {
+    _setAuthState(const AuthSessionState.ready());
+  }
+
+  @override
+  Future<void> cancelAuthentication() async {
+    _setAuthState(const AuthSessionState.ready());
+  }
+
+  @override
+  Future<void> signOut() async {
+    _setAuthState(const AuthSessionState.signedOut());
+  }
+
+  void _seed() {
     const ann = ChatParticipant(
       name: 'Ann',
       portraitAsset: 'assets/portraits/ann.png',
@@ -78,7 +166,7 @@ class MockChatRepository implements ChatRepository {
       color: Color(0xFF1BC8F9),
     );
 
-    final chats = [
+    _chats = [
       ChatSummary(
         id: 'phantom-thieves',
         title: 'After school',
@@ -162,7 +250,108 @@ class MockChatRepository implements ChatRepository {
       ),
     ];
 
-    chats.sort((a, b) {
+    _messagesByChat
+      ..clear()
+      ..addAll({
+        'phantom-thieves': _stampMessages('phantom-thieves', [
+          const Message(
+            sender: Sender.ann,
+            text:
+                'We have to find them tomorrow for sure. This is the only lead we have right now.',
+          ),
+          const Message(
+            sender: Sender.yusuke,
+            text:
+                'Yes. It is highly likely that this part-time solicitor is somehow related to the mafia.',
+          ),
+          const Message(
+            sender: Sender.ryuji,
+            text:
+                'He talked to Iida and Nishiyama over at Central Street, right?',
+          ),
+        ]),
+        'ann': _stampMessages('ann', [
+          const Message(
+            sender: Sender.ann,
+            text:
+                "It's kinda scary to think people like that are all around us in this city...",
+          ),
+          const Message(sender: Sender.ren, text: 'We will handle it.'),
+          const Message(
+            sender: Sender.ann,
+            text: "That's not a bad idea. Just be careful, okay?",
+          ),
+        ]),
+        'group-today': _stampMessages('group-today', [
+          const Message(sender: Sender.ryuji, text: 'Man, I am beat.'),
+          const Message(
+            sender: Sender.yusuke,
+            text: 'Fatigue is no excuse for poor observation.',
+          ),
+          const Message(
+            sender: Sender.ryuji,
+            text: "Well guys, we gotta brace ourselves. We're up against it.",
+          ),
+        ]),
+        'yusuke': _stampMessages('yusuke', [
+          const Message(
+            sender: Sender.yusuke,
+            text:
+                'Indeed, it seems that is where our target waits. But then... who should be the one to go?',
+          ),
+          const Message(
+            sender: Sender.ren,
+            text: 'We can decide after school.',
+          ),
+        ]),
+        'ryuji': _stampMessages('ryuji', [
+          const Message(
+            sender: Sender.ryuji,
+            text:
+                'He talked to Iida and Nishiyama over at Central Street, right?',
+          ),
+          const Message(sender: Sender.ren, text: 'Yeah. That tracks.'),
+        ]),
+        'ann-private': _stampMessages('ann-private', [
+          const Message(sender: Sender.ann, text: 'I saw Shiho today...'),
+          const Message(sender: Sender.ren, text: 'How did she look?'),
+        ]),
+        'velvet-channel': _stampMessages('velvet-channel', [
+          const Message(sender: Sender.yusuke, text: 'Look at the rankings!'),
+          const Message(
+            sender: Sender.ann,
+            imagePath: 'assets/images/template.jpg',
+          ),
+        ]),
+      });
+  }
+
+  List<Message> _stampMessages(String chatId, List<Message> messages) {
+    final base = DateTime(2016, 4, 19, 15);
+    return [
+      for (var i = 0; i < messages.length; i++)
+        _copyMessage(
+          messages[i],
+          id: _nextMessageId(),
+          chatId: chatId,
+          createdAt: base.add(Duration(minutes: i * 4)),
+        ),
+    ];
+  }
+
+  List<Message> _messagesFor(String chatId) {
+    return _messagesByChat.putIfAbsent(chatId, () => <Message>[]);
+  }
+
+  void _updateChat(String chatId, ChatSummary Function(ChatSummary) update) {
+    _chats = [
+      for (final chat in _chats) chat.id == chatId ? update(chat) : chat,
+    ];
+  }
+
+  List<ChatSummary> _sortedChats() {
+    final sorted = [..._chats];
+    sorted.sort((a, b) {
       final pinnedA = a.pinnedAt;
       final pinnedB = b.pinnedAt;
       if (pinnedA != null || pinnedB != null) {
@@ -172,6 +361,55 @@ class MockChatRepository implements ChatRepository {
       }
       return b.updatedAt.compareTo(a.updatedAt);
     });
-    return chats;
+    return List.unmodifiable(sorted);
+  }
+
+  void _emitChats() {
+    if (!_chatController.isClosed) _chatController.add(_sortedChats());
+  }
+
+  void _setAuthState(AuthSessionState state) {
+    _authState = state;
+    _emitAuth();
+  }
+
+  void _emitAuth() {
+    if (!_authController.isClosed) _authController.add(_authState);
+  }
+
+  String _nextMessageId() => 'mock-${++_messageSerial}';
+
+  String _previewFor(Message message) {
+    if (message.text.trim().isNotEmpty) return message.text.trim();
+    return switch (message.kind) {
+      MessageKind.image => 'Photo',
+      MessageKind.file => message.fileName ?? 'File',
+      MessageKind.gif => 'GIF',
+      MessageKind.sticker => 'Sticker',
+      MessageKind.text => '',
+    };
+  }
+
+  Message _copyMessage(
+    Message message, {
+    String? id,
+    String? chatId,
+    DateTime? createdAt,
+    MessageDeliveryStatus? status,
+  }) {
+    return Message(
+      id: id ?? message.id,
+      chatId: chatId ?? message.chatId,
+      sender: message.sender,
+      text: message.text,
+      createdAt: createdAt ?? message.createdAt,
+      status: status ?? message.status,
+      imagePath: message.imagePath,
+      stickerPath: message.stickerPath,
+      gifPath: message.gifPath,
+      filePath: message.filePath,
+      fileName: message.fileName,
+      fileSize: message.fileSize,
+    );
   }
 }

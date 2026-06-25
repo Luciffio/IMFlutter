@@ -1,5 +1,6 @@
 import '../models/chat_summary.dart';
 import '../models/message.dart';
+import '../models/auth_session.dart';
 import 'chat_repository.dart';
 
 /// Telegram backend — replace [MockChatRepository] with this in main.dart
@@ -69,6 +70,18 @@ class TelegramRepository implements ChatRepository {
   }
 
   @override
+  Stream<List<ChatSummary>> get chats {
+    // TODO: emit TDLib chat list / unread / order updates
+    throw UnimplementedError('TelegramRepository.chats');
+  }
+
+  @override
+  Stream<AuthSessionState> get authState {
+    // TODO: map TDLib authorizationState updates.
+    throw UnimplementedError('TelegramRepository.authState');
+  }
+
+  @override
   Future<void> disconnect() {
     // TODO: tdlib.close()
     throw UnimplementedError('TelegramRepository.disconnect()');
@@ -91,5 +104,47 @@ class TelegramRepository implements ChatRepository {
   Future<void> markChatOpened(String chatId) {
     // TODO: tdlib.viewMessages / mark messages as read for chatId
     throw UnimplementedError('TelegramRepository.markChatOpened()');
+  }
+
+  @override
+  Future<AuthSessionState> getAuthState() {
+    // TODO: return latest mapped TDLib authorization state.
+    throw UnimplementedError('TelegramRepository.getAuthState()');
+  }
+
+  @override
+  Future<void> startAuthentication() {
+    // TODO: start TDLib authorization flow.
+    throw UnimplementedError('TelegramRepository.startAuthentication()');
+  }
+
+  @override
+  Future<void> submitPhoneNumber(String phoneNumber) {
+    // TODO: tdlib.setAuthenticationPhoneNumber(...)
+    throw UnimplementedError('TelegramRepository.submitPhoneNumber()');
+  }
+
+  @override
+  Future<void> submitCode(String code) {
+    // TODO: tdlib.checkAuthenticationCode(...)
+    throw UnimplementedError('TelegramRepository.submitCode()');
+  }
+
+  @override
+  Future<void> submitPassword(String password) {
+    // TODO: tdlib.checkAuthenticationPassword(...)
+    throw UnimplementedError('TelegramRepository.submitPassword()');
+  }
+
+  @override
+  Future<void> cancelAuthentication() {
+    // TODO: cancel local auth UI or close auth flow when supported.
+    throw UnimplementedError('TelegramRepository.cancelAuthentication()');
+  }
+
+  @override
+  Future<void> signOut() {
+    // TODO: tdlib.logOut()
+    throw UnimplementedError('TelegramRepository.signOut()');
   }
 }
