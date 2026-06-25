@@ -172,9 +172,11 @@ class _RootShellState extends State<_RootShell> {
     const useTelegram = bool.fromEnvironment('USE_TELEGRAM');
     if (!useTelegram) return MockChatRepository();
 
+    const apiId = int.fromEnvironment('TG_API_ID');
+    const apiHash = String.fromEnvironment('TG_API_HASH');
     return TelegramRepository(
-      apiId: int.fromEnvironment('TG_API_ID'),
-      apiHash: String.fromEnvironment('TG_API_HASH'),
+      apiId: apiId,
+      apiHash: apiHash,
     );
   }
 

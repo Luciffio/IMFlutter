@@ -19,6 +19,12 @@ class TdlibGateway {
   Future<void> initialize() async {
     if (_initialized) return;
     await TdPlugin.initialize();
+    TdPlugin.instance.tdExecute(
+      jsonEncode({
+        '@type': 'setLogVerbosityLevel',
+        'new_verbosity_level': 1,
+      }),
+    );
     _clientId = TdPlugin.instance.tdCreateClientId();
     _running = true;
     _initialized = true;
@@ -68,9 +74,9 @@ class TdlibGateway {
 
   Future<void> _receiveLoop() async {
     while (_running) {
-      final raw = TdPlugin.instance.tdReceive(0.2);
+      final raw = TdPlugin.instance.tdReceive(0);
       if (raw == null) {
-        await Future<void>.delayed(const Duration(milliseconds: 16));
+        await Future<void>.delayed(const Duration(milliseconds: 80));
         continue;
       }
 
