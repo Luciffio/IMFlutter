@@ -70,7 +70,12 @@ class _RootShell extends StatefulWidget {
 class _RootShellState extends State<_RootShell> {
   static const _particleModeKey = 'settings.particleMode';
   static const _transitionsKey = 'settings.transitionAnimationsEnabled';
-  static const _useTelegramBackend = bool.fromEnvironment('USE_TELEGRAM');
+  static const _telegramApiId = int.fromEnvironment('TG_API_ID');
+  static const _telegramApiHash = String.fromEnvironment('TG_API_HASH');
+  static const _hasTelegramCredentials =
+      _telegramApiId != 0 && _telegramApiHash != '';
+  static const _useTelegramBackend =
+      bool.fromEnvironment('USE_TELEGRAM') || _hasTelegramCredentials;
 
   late final ChatRepository _chatRepo;
   StreamSubscription<AuthSessionState>? _authSub;
@@ -185,12 +190,7 @@ class _RootShellState extends State<_RootShell> {
   ChatRepository _createRepository() {
     if (!_useTelegramBackend) return MockChatRepository();
 
-    const apiId = int.fromEnvironment('TG_API_ID');
-    const apiHash = String.fromEnvironment('TG_API_HASH');
-    return TelegramRepository(
-      apiId: apiId,
-      apiHash: apiHash,
-    );
+    return TelegramRepository(apiId: _telegramApiId, apiHash: _telegramApiHash);
   }
 
   @override
