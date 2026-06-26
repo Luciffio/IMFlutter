@@ -175,24 +175,74 @@ class TelegramRepository implements ChatRepository {
     final id = int.tryParse(chatId);
     if (id == null) return const [];
 
-    final result = await _gateway.invoke({
-      '@type': 'getChatHistory',
-      'chat_id': id,
-      'from_message_id': 0,
-      'offset': 0,
-      'limit': 40,
-      'only_local': false,
-    });
-
-    final rawMessages = (result['messages'] as List? ?? const [])
-        .whereType<TdJson>()
-        .toList();
+    unawaited(_openChat(id));
+    final rawMessages = await _loadChatHistory(id);
     final messages = <Message>[];
     for (final raw in rawMessages.reversed) {
       messages.add(await _mapMessage(raw));
     }
     _messagesByChat[chatId] = messages;
     return List.unmodifiable(messages);
+  }
+
+  Future<List<TdJson>> _loadChatHistory(int chatId) async {
+    final byId = <int, TdJson>{};
+    var fromMessageId = 0;
+
+    for (var page = 0; page < 6; page++) {
+      final offset = fromMessageId == 0 ? 0 : -1;
+      final result = await _gateway.invoke({
+        '@type': 'getChatHistory',
+        'chat_id': chatId,
+        'from_message_id': fromMessageId,
+        'offset': offset,
+        'limit': 60,
+        'only_local': false,
+      });
+
+      final messages = (result['messages'] as List? ?? const [])
+          .whereType<TdJson>()
+          .toList();
+      if (messages.isEmpty) break;
+
+      var added = 0;
+      for (final message in messages) {
+        final id = message['id'];
+        if (id is! int || byId.containsKey(id)) continue;
+        byId[id] = message;
+        added++;
+      }
+
+      final oldestId = messages.last['id'];
+      if (oldestId is! int || oldestId == fromMessageId) break;
+      fromMessageId = oldestId;
+
+      if (byId.length >= 80) break;
+      if (added == 0) break;
+      if (messages.length <= 1) {
+        await Future<void>.delayed(const Duration(milliseconds: 350));
+      }
+    }
+
+    final sorted = byId.values.toList();
+    sorted.sort((a, b) {
+      final left = a['id'];
+      final right = b['id'];
+      if (left is! int || right is! int) return 0;
+      return right.compareTo(left);
+    });
+    return sorted;
+  }
+
+  Future<void> _openChat(int chatId) async {
+    try {
+      await _gateway.invoke({
+        '@type': 'openChat',
+        'chat_id': chatId,
+      }, timeout: const Duration(seconds: 10));
+    } catch (_) {
+      // History loading still works for chats TDLib can't mark as opened.
+    }
   }
 
   @override

@@ -1,7 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import '../models/message.dart';
-import '../theme/persona_colors.dart';
 
 // Large image bubble — Persona 5 IM photo style:
 //   • full-width photo frame, slightly tilted, very thick black border
@@ -28,43 +27,52 @@ class ImageBubble extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (ctx, constraints) {
-      const margin = 12.0;
-      // Extra top padding so the rotated frame (≈13 dp overflow at the
-      // top-right corner) never bleeds into the 16 dp gap above and hides
-      // the connecting-line shadow. 20 dp gives a comfortable 7 dp buffer.
-      const topPad = 20.0;
-      final frameW = constraints.maxWidth - margin * 2;
-      final frameH = (frameW * 0.68).roundToDouble();
-      final containerH = topPad + frameH + _kBadgeSize - _kBadgeOverlap;
+    return LayoutBuilder(
+      builder: (ctx, constraints) {
+        const margin = 12.0;
+        // Extra top padding so the rotated frame (≈13 dp overflow at the
+        // top-right corner) never bleeds into the 16 dp gap above and hides
+        // the connecting-line shadow. 20 dp gives a comfortable 7 dp buffer.
+        const topPad = 20.0;
+        final frameW = constraints.maxWidth - margin * 2;
+        final frameH = (frameW * 0.68).roundToDouble();
+        final containerH = topPad + frameH + _kBadgeSize - _kBadgeOverlap;
 
-      return Align(
-        alignment: Alignment.center,
-        child: SizedBox(
-          width: frameW,
-          height: containerH,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              // Badge drawn FIRST → behind the frame
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: _SenderBadge(sender: message.sender),
-              ),
-              // Frame drawn SECOND → in front, overlaps badge's top-left.
-              // top: topPad ensures the rotation overflow stays within the item
-              // and doesn't bleed into the gap above (where the shadow lives).
-              Positioned(
-                left: 0,
-                top: topPad,
-                child: _buildFrame(frameW, frameH),
-              ),
-            ],
+        return Align(
+          alignment: Alignment.center,
+          child: SizedBox(
+            width: frameW,
+            height: containerH,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                // Badge drawn FIRST → behind the frame
+                if (_hasSenderBadge)
+                  Positioned(
+                    right: 0,
+                    bottom: 0,
+                    child: _SenderBadge(message: message),
+                  ),
+                // Frame drawn SECOND → in front, overlaps badge's top-left.
+                // top: topPad ensures the rotation overflow stays within the item
+                // and doesn't bleed into the gap above (where the shadow lives).
+                Positioned(
+                  left: 0,
+                  top: topPad,
+                  child: _buildFrame(frameW, frameH),
+                ),
+              ],
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+    );
+  }
+
+  bool get _hasSenderBadge {
+    final avatar = message.avatarPath;
+    return message.sender.portraitAsset != null ||
+        (avatar != null && avatar.isNotEmpty);
   }
 
   // Bundled assets start with "assets/"; anything else is a file path from
@@ -76,7 +84,7 @@ class ImageBubble extends StatelessWidget {
     return Image.file(
       File(path),
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+      errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
     );
   }
 
@@ -117,8 +125,8 @@ class ImageBubble extends StatelessWidget {
 // Small square in P5 style: thick black border, white fill, portrait face.
 
 class _SenderBadge extends StatelessWidget {
-  final Sender sender;
-  const _SenderBadge({required this.sender});
+  final Message message;
+  const _SenderBadge({required this.message});
 
   @override
   Widget build(BuildContext context) {
@@ -130,21 +138,44 @@ class _SenderBadge extends StatelessWidget {
         children: [
           Positioned.fill(child: CustomPaint(painter: const _BadgePainter())),
           Positioned.fill(
-            child: ClipPath(
-              clipper: const _BadgeClipper(),
-              child: sender.portraitAsset != null
-                  ? Image.asset(
-                      sender.portraitAsset!,
-                      fit: BoxFit.cover,
-                      // bias upward so the face area is shown
-                      alignment: const Alignment(0, -0.6),
-                      errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-                    )
-                  : const SizedBox.shrink(),
-            ),
+            child: ClipPath(clipper: const _BadgeClipper(), child: _portrait()),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _portrait() {
+    final avatar = message.avatarPath;
+    if (avatar != null && avatar.isNotEmpty) {
+      if (avatar.startsWith('assets/')) {
+        return Image.asset(
+          avatar,
+          fit: BoxFit.cover,
+          alignment: const Alignment(0, -0.6),
+          errorBuilder: (_, _, _) => _fallbackPortrait(),
+        );
+      }
+      return Image.file(
+        File(avatar),
+        fit: BoxFit.cover,
+        alignment: const Alignment(0, -0.6),
+        errorBuilder: (_, _, _) => _fallbackPortrait(),
+      );
+    }
+
+    return _fallbackPortrait();
+  }
+
+  Widget _fallbackPortrait() {
+    final portrait = message.sender.portraitAsset;
+    if (portrait == null) return const SizedBox.shrink();
+
+    return Image.asset(
+      portrait,
+      fit: BoxFit.cover,
+      alignment: const Alignment(0, -0.6),
+      errorBuilder: (_, _, _) => const SizedBox.shrink(),
     );
   }
 }
