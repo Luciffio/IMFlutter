@@ -258,6 +258,7 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   TranscriptState? _transcriptState;
   StreamSubscription<Message>? _incomingSub;
+  bool _usesLiveHistory = false;
 
   @override
   void initState() {
@@ -282,13 +283,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     final messages = await widget.repository.getMessages(widget.chat.id);
     if (!mounted) return;
 
+    final usesLiveHistory = messages.any((message) => message.id != null);
     final state = TranscriptState(vsync: this, messages: messages);
-    if (messages.any((message) => message.id != null)) {
+    if (usesLiveHistory) {
       state.showAll();
     } else {
       state.advance();
     }
-    setState(() => _transcriptState = state);
+    setState(() {
+      _usesLiveHistory = usesLiveHistory;
+      _transcriptState = state;
+    });
     unawaited(widget.repository.markChatOpened(widget.chat.id));
   }
 
@@ -363,7 +368,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             const Center(child: CircularProgressIndicator(color: Colors.white))
           else
             GestureDetector(
-              onTap: transcriptState.advanceAfterTyping,
+              onTap: _usesLiveHistory
+                  ? null
+                  : transcriptState.advanceAfterTyping,
               child: Transcript(state: transcriptState),
             ),
 

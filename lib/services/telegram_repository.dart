@@ -231,7 +231,6 @@ class TelegramRepository implements ChatRepository {
 
     final message = await _mapMessage(sent);
     _messagesFor(chatId).add(message);
-    _messageController.add(message);
   }
 
   Future<void> _invokeAuth(TdJson request) async {
@@ -397,17 +396,29 @@ class TelegramRepository implements ChatRepository {
             _largestPhotoFile(content?['photo'] as TdJson?),
           )
         : null;
+    final stickerPath = content?['@type'] == 'messageSticker'
+        ? await _downloadFilePath(_stickerFile(content?['sticker'] as TdJson?))
+        : null;
+    final gifPath = content?['@type'] == 'messageAnimation'
+        ? await _downloadFilePath(
+            _animationFile(content?['animation'] as TdJson?),
+          )
+        : null;
 
     return Message(
       id: (raw['id'] as int?)?.toString(),
       chatId: chatId,
       sender: outgoing ? Sender.ren : Sender.ann,
-      text: imagePath == null ? _messagePreview(raw) : _captionText(content),
+      text: imagePath == null && stickerPath == null && gifPath == null
+          ? _messagePreview(raw)
+          : _captionText(content),
       createdAt: _dateFromUnix(raw['date']),
       status: outgoing
           ? MessageDeliveryStatus.sent
           : MessageDeliveryStatus.delivered,
       imagePath: imagePath,
+      stickerPath: stickerPath,
+      gifPath: gifPath,
       avatarPath: outgoing ? null : _chatsById[chatId]?.avatarPath,
     );
   }
@@ -463,6 +474,16 @@ class TelegramRepository implements ChatRepository {
       }
     }
     return bestFile;
+  }
+
+  TdJson? _stickerFile(TdJson? sticker) {
+    final file = sticker?['sticker'];
+    return file is TdJson ? file : null;
+  }
+
+  TdJson? _animationFile(TdJson? animation) {
+    final file = animation?['animation'];
+    return file is TdJson ? file : null;
   }
 
   Future<String?> _downloadFilePath(TdJson? file) async {

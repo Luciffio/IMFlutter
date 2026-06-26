@@ -33,8 +33,12 @@ class StickerBubble extends StatelessWidget {
   });
 
   String get _path => message.animatedMediaPath!;
-  bool get _isLottie => _path.endsWith('.tgs');
-  bool get _isVideo => _path.endsWith('.webm');
+  String get _lowerPath => _path.toLowerCase();
+  bool get _isLottie => _lowerPath.endsWith('.tgs');
+  bool get _isVideo =>
+      _lowerPath.endsWith('.webm') ||
+      _lowerPath.endsWith('.mp4') ||
+      _lowerPath.endsWith('.mov');
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +76,7 @@ class StickerBubble extends StatelessWidget {
               top: 0,
               child: PersonaAvatar(
                 sender: message.sender,
+                imagePath: message.avatarPath,
                 backgroundScale: avatarBackgroundScale,
                 foregroundScale: avatarForegroundScale,
               ),
@@ -101,6 +106,15 @@ class StickerBubble extends StatelessWidget {
   Widget _media() {
     if (_isLottie) return _TgsSticker(path: _path, size: _kSize);
     if (_isVideo) return _WebmSticker(path: _path, size: _kSize);
+    if (!_path.startsWith('assets/')) {
+      return Image.file(
+        File(_path),
+        width: _kSize,
+        height: _kSize,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) => const _StickerPlaceholder(),
+      );
+    }
     return Image.asset(
       _path,
       width: _kSize,
@@ -185,9 +199,10 @@ class _TgsStickerState extends State<_TgsSticker> {
 
   Future<void> _load() async {
     try {
-      final data = await rootBundle.load(widget.path);
+      final compressed = widget.path.startsWith('assets/')
+          ? (await rootBundle.load(widget.path)).buffer.asUint8List()
+          : await File(widget.path).readAsBytes();
       // .tgs is gzip-compressed — decompress before feeding to Lottie
-      final compressed = data.buffer.asUint8List();
       final decompressed = GZipCodec().decode(compressed);
       if (mounted) setState(() => _bytes = Uint8List.fromList(decompressed));
     } catch (e) {
@@ -206,8 +221,8 @@ class _TgsStickerState extends State<_TgsSticker> {
       height: widget.size,
       fit: BoxFit.contain,
       repeat: true,
-      errorBuilder: (_, e, __) {
-        debugPrint('Lottie render error: $e');
+      errorBuilder: (context, error, stackTrace) {
+        debugPrint('Lottie render error: $error');
         return const _StickerPlaceholder();
       },
     );
@@ -237,13 +252,18 @@ class _WebmStickerState extends State<_WebmSticker> {
 
   Future<void> _init() async {
     try {
-      // VideoPlayerController.asset() is unreliable for webm on Android.
-      // Copy the asset to a temp file and use VideoPlayerController.file().
-      final data = await rootBundle.load(widget.path);
-      final bytes = data.buffer.asUint8List();
-      final dir = Directory.systemTemp;
-      final file = File('${dir.path}/${widget.path.hashCode}.webm');
-      await file.writeAsBytes(bytes, flush: true);
+      final File file;
+      if (widget.path.startsWith('assets/')) {
+        // VideoPlayerController.asset() is unreliable for webm on Android.
+        // Copy the asset to a temp file and use VideoPlayerController.file().
+        final data = await rootBundle.load(widget.path);
+        final bytes = data.buffer.asUint8List();
+        final dir = Directory.systemTemp;
+        file = File('${dir.path}/${widget.path.hashCode}.webm');
+        await file.writeAsBytes(bytes, flush: true);
+      } else {
+        file = File(widget.path);
+      }
 
       final ctrl = VideoPlayerController.file(file);
       await ctrl.setLooping(true);
