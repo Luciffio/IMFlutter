@@ -160,7 +160,7 @@ class TelegramRepository implements ChatRepository {
     final ids = (result['chat_ids'] as List? ?? const []);
     for (final id in ids.whereType<int>()) {
       final chat = await _gateway.invoke({'@type': 'getChat', 'chat_id': id});
-      _cacheChat(chat);
+      await _cacheChat(chat);
     }
 
     _emitChats();
@@ -187,7 +187,10 @@ class TelegramRepository implements ChatRepository {
     final rawMessages = (result['messages'] as List? ?? const [])
         .whereType<TdJson>()
         .toList();
-    final messages = rawMessages.map(_mapMessage).toList().reversed.toList();
+    final messages = <Message>[];
+    for (final raw in rawMessages.reversed) {
+      messages.add(await _mapMessage(raw));
+    }
     _messagesByChat[chatId] = messages;
     return List.unmodifiable(messages);
   }
@@ -226,7 +229,7 @@ class TelegramRepository implements ChatRepository {
       },
     });
 
-    final message = _mapMessage(sent);
+    final message = await _mapMessage(sent);
     _messagesFor(chatId).add(message);
     _messageController.add(message);
   }
@@ -244,7 +247,7 @@ class TelegramRepository implements ChatRepository {
       case 'updateAuthorizationState':
         _handleAuthorizationState(update['authorization_state'] as TdJson?);
       case 'updateNewChat':
-        _cacheChat(update['chat'] as TdJson?);
+        await _cacheChat(update['chat'] as TdJson?);
         _emitChats();
       case 'updateChatLastMessage':
         await _refreshChat(update['chat_id']);
@@ -256,7 +259,11 @@ class TelegramRepository implements ChatRepository {
       case 'updateNewMessage':
         final raw = update['message'];
         if (raw is TdJson) {
-          final message = _mapMessage(raw);
+          if (raw['is_outgoing'] == true) {
+            await _refreshChat(raw['chat_id']);
+            return;
+          }
+          final message = await _mapMessage(raw);
           _messagesFor(message.chatId ?? '').add(message);
           _messageController.add(message);
           await _refreshChat(raw['chat_id']);
@@ -267,7 +274,7 @@ class TelegramRepository implements ChatRepository {
   Future<void> _refreshChat(Object? chatId) async {
     if (chatId is! int || !_ready) return;
     final chat = await _gateway.invoke({'@type': 'getChat', 'chat_id': chatId});
-    _cacheChat(chat);
+    await _cacheChat(chat);
     _emitChats();
   }
 
@@ -278,9 +285,7 @@ class TelegramRepository implements ChatRepository {
         await _sendTdlibParameters();
       case 'authorizationStateWaitPhoneNumber':
         _setAuthState(
-          const AuthSessionState.waitPhone().copyWith(
-            clearCodeDelivery: true,
-          ),
+          const AuthSessionState.waitPhone().copyWith(clearCodeDelivery: true),
         );
       case 'authorizationStateWaitCode':
         final codeInfo = state['code_info'] as TdJson?;
@@ -332,18 +337,23 @@ class TelegramRepository implements ChatRepository {
     });
   }
 
-  void _cacheChat(TdJson? raw) {
+  Future<void> _cacheChat(TdJson? raw) async {
     if (raw == null) return;
-    final summary = _mapChat(raw);
+    final summary = await _mapChat(raw);
     _chatsById[summary.id] = summary;
   }
 
-  ChatSummary _mapChat(TdJson raw) {
+  Future<ChatSummary> _mapChat(TdJson raw) async {
     final id = raw['id'] as int;
     final lastMessage = raw['last_message'] as TdJson?;
     final lastDate = _dateFromUnix(lastMessage?['date']);
     final isPinned = _isPinned(raw['positions']);
     final isChannel = _isChannel(raw['type']);
+    final photoFile = _chatPhotoFile(raw['photo'] as TdJson?);
+    final avatarPath = photoFile == null ? null : _localFilePath(photoFile);
+    if (avatarPath == null && photoFile != null) {
+      unawaited(_hydrateChatAvatar(id.toString(), photoFile));
+    }
 
     return ChatSummary(
       id: id.toString(),
@@ -358,6 +368,7 @@ class TelegramRepository implements ChatRepository {
       updatedAt: lastDate ?? DateTime.fromMillisecondsSinceEpoch(0),
       participants: const [],
       lastMessagePreview: _messagePreview(lastMessage),
+      avatarPath: avatarPath,
       avatarLabel: _initials(raw['title'] as String?),
       pinnedAt: isPinned ? DateTime.now() : null,
       lastIncomingAt: _isOutgoing(lastMessage) ? null : lastDate,
@@ -366,17 +377,38 @@ class TelegramRepository implements ChatRepository {
     );
   }
 
-  Message _mapMessage(TdJson raw) {
+  Future<void> _hydrateChatAvatar(String chatId, TdJson file) async {
+    final path = await _downloadFilePath(file);
+    if (path == null) return;
+
+    final current = _chatsById[chatId];
+    if (current == null || current.avatarPath == path) return;
+
+    _chatsById[chatId] = current.copyWith(avatarPath: path);
+    _emitChats();
+  }
+
+  Future<Message> _mapMessage(TdJson raw) async {
     final outgoing = raw['is_outgoing'] == true;
+    final chatId = (raw['chat_id'] as int?)?.toString();
+    final content = raw['content'] as TdJson?;
+    final imagePath = content?['@type'] == 'messagePhoto'
+        ? await _downloadFilePath(
+            _largestPhotoFile(content?['photo'] as TdJson?),
+          )
+        : null;
+
     return Message(
       id: (raw['id'] as int?)?.toString(),
-      chatId: (raw['chat_id'] as int?)?.toString(),
+      chatId: chatId,
       sender: outgoing ? Sender.ren : Sender.ann,
-      text: _messagePreview(raw),
+      text: imagePath == null ? _messagePreview(raw) : _captionText(content),
       createdAt: _dateFromUnix(raw['date']),
       status: outgoing
           ? MessageDeliveryStatus.sent
           : MessageDeliveryStatus.delivered,
+      imagePath: imagePath,
+      avatarPath: outgoing ? null : _chatsById[chatId]?.avatarPath,
     );
   }
 
@@ -407,6 +439,70 @@ class TelegramRepository implements ChatRepository {
     return DateTime.fromMillisecondsSinceEpoch(value * 1000);
   }
 
+  TdJson? _chatPhotoFile(TdJson? photo) {
+    final small = photo?['small'];
+    return small is TdJson ? small : null;
+  }
+
+  TdJson? _largestPhotoFile(TdJson? photo) {
+    final sizes = photo?['sizes'];
+    if (sizes is! List) return null;
+
+    TdJson? bestFile;
+    var bestArea = 0;
+    for (final size in sizes.whereType<TdJson>()) {
+      final width = size['width'];
+      final height = size['height'];
+      final file = size['photo'];
+      if (width is! int || height is! int || file is! TdJson) continue;
+
+      final area = width * height;
+      if (area > bestArea) {
+        bestArea = area;
+        bestFile = file;
+      }
+    }
+    return bestFile;
+  }
+
+  Future<String?> _downloadFilePath(TdJson? file) async {
+    if (file == null) return null;
+
+    final localPath = _localFilePath(file);
+    if (localPath != null && File(localPath).existsSync()) return localPath;
+
+    final fileId = file['id'];
+    if (fileId is! int) return localPath;
+
+    try {
+      final downloaded = await _gateway.invoke({
+        '@type': 'downloadFile',
+        'file_id': fileId,
+        'priority': 16,
+        'offset': 0,
+        'limit': 0,
+        'synchronous': true,
+      }, timeout: const Duration(seconds: 60));
+      return _localFilePath(downloaded) ?? localPath;
+    } catch (_) {
+      return localPath;
+    }
+  }
+
+  String? _localFilePath(TdJson file) {
+    final local = file['local'];
+    if (local is! TdJson) return null;
+    final path = local['path'];
+    if (path is String && path.trim().isNotEmpty) return path;
+    return null;
+  }
+
+  String _captionText(TdJson? content) {
+    final caption = (content?['caption'] as TdJson?)?['text'];
+    if (caption is String && caption.trim().isNotEmpty) return caption;
+    return '';
+  }
+
   String _messagePreview(TdJson? message) {
     final content = message?['content'];
     if (content is! TdJson) return '';
@@ -424,7 +520,8 @@ class TelegramRepository implements ChatRepository {
 
   String? _codeDeliveryMessage(TdJson? codeInfo) {
     if (codeInfo == null) return null;
-    final type = _codeTypeLabel(codeInfo['type'] as TdJson?) ?? 'CODE REQUESTED';
+    final type =
+        _codeTypeLabel(codeInfo['type'] as TdJson?) ?? 'CODE REQUESTED';
     final nextType = _codeTypeLabel(codeInfo['next_type'] as TdJson?);
     final timeout = codeInfo['timeout'];
     final resend = nextType == null || timeout is! int || timeout <= 0

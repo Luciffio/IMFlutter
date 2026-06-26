@@ -52,6 +52,7 @@ class Message {
   final String? filePath;
   final String? fileName;
   final int? fileSize;
+  final String? avatarPath;
 
   const Message({
     this.id,
@@ -66,6 +67,7 @@ class Message {
     this.filePath,
     this.fileName,
     this.fileSize,
+    this.avatarPath,
   });
 
   bool get isImage => imagePath != null;

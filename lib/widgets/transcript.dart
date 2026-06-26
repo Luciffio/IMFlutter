@@ -75,7 +75,7 @@ class TranscriptState extends ChangeNotifier {
   final Random _rng = Random();
 
   final List<_EntryState> _entries = [];
-  List<_EntryState> get entries => List.unmodifiable(_entries);
+  List<_EntryState> get _visibleEntries => List.unmodifiable(_entries);
 
   int _messageIndex = 0;
   bool _isSomeoneTyping = false;
@@ -93,13 +93,21 @@ class TranscriptState extends ChangeNotifier {
   /// Loops back to the start when all messages have been shown.
   void advance() {
     if (_messageIndex >= _messages.length) {
-      for (final e in _entries) e.dispose();
+      for (final e in _entries) {
+        e.dispose();
+      }
       _entries.clear();
       _messageIndex = 0;
       notifyListeners();
       return;
     }
     _showMessage(_messages[_messageIndex++]);
+  }
+
+  void showAll() {
+    while (_messageIndex < _messages.length) {
+      _showMessage(_messages[_messageIndex++]);
+    }
   }
 
   Future<void> advanceAfterTyping() async {
@@ -274,7 +282,9 @@ class TranscriptState extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
-    for (final e in _entries) e.dispose();
+    for (final e in _entries) {
+      e.dispose();
+    }
     super.dispose();
   }
 }
@@ -321,7 +331,7 @@ class _TranscriptState extends State<Transcript> {
 
   @override
   Widget build(BuildContext context) {
-    final entries = widget.state.entries;
+    final entries = widget.state._visibleEntries;
     return ListView.separated(
       controller: _scrollCtrl,
       padding: EdgeInsets.only(
@@ -331,7 +341,8 @@ class _TranscriptState extends State<Transcript> {
         bottom: 180 + MediaQuery.of(context).padding.bottom,
       ),
       itemCount: entries.length,
-      separatorBuilder: (_, __) => const SizedBox(height: kEntrySpacing),
+      separatorBuilder: (context, index) =>
+          const SizedBox(height: kEntrySpacing),
       itemBuilder: (context, index) {
         final entry = entries[index];
 
@@ -344,7 +355,7 @@ class _TranscriptState extends State<Transcript> {
             entry.msgAlpha,
             entry.lineProgress,
           ]),
-          builder: (_, __) => _buildItem(entry),
+          builder: (context, child) => _buildItem(entry),
         );
       },
     );

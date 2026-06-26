@@ -283,7 +283,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     if (!mounted) return;
 
     final state = TranscriptState(vsync: this, messages: messages);
-    state.advance();
+    if (messages.any((message) => message.id != null)) {
+      state.showAll();
+    } else {
+      state.advance();
+    }
     setState(() => _transcriptState = state);
     unawaited(widget.repository.markChatOpened(widget.chat.id));
   }

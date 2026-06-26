@@ -292,7 +292,7 @@ class _ChatAvatarBadge extends StatelessWidget {
           Positioned.fill(
             child: ClipPath(
               clipper: const _BadgeClipper(),
-              child: isGroup
+              child: isGroup && chat.avatarPath == null
                   ? Center(
                       child: Transform.rotate(
                         angle: -0.04,

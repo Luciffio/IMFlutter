@@ -1,15 +1,19 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import '../models/message.dart';
 import '../theme/persona_colors.dart';
 
 class PersonaAvatar extends StatelessWidget {
   final Sender sender;
+  final String? imagePath;
   final double backgroundScale;
   final double foregroundScale;
 
   const PersonaAvatar({
     super.key,
     required this.sender,
+    this.imagePath,
     this.backgroundScale = 1.0,
     this.foregroundScale = 1.0,
   });
@@ -47,6 +51,26 @@ class PersonaAvatar extends StatelessWidget {
   }
 
   Widget _buildPortrait() {
+    final path = imagePath;
+    if (path != null && path.isNotEmpty) {
+      if (path.startsWith('assets/')) {
+        return Image.asset(
+          path,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => _fallbackPortrait(),
+        );
+      }
+      return Image.file(
+        File(path),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => _fallbackPortrait(),
+      );
+    }
+
+    return _fallbackPortrait();
+  }
+
+  Widget _fallbackPortrait() {
     final asset = sender.portraitAsset;
     if (asset == null) return _AvatarPlaceholder(sender: sender);
     return Image.asset(

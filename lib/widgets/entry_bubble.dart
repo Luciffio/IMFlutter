@@ -35,6 +35,7 @@ class EntryBubble extends StatelessWidget {
           _EntryLayoutBox(
             avatar: PersonaAvatar(
               sender: message.sender,
+              imagePath: message.avatarPath,
               backgroundScale: avatarBackgroundScale,
               foregroundScale: avatarForegroundScale,
             ),
