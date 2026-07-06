@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import '../models/message.dart';
@@ -80,12 +81,20 @@ class TranscriptState extends ChangeNotifier {
   int _messageIndex = 0;
   bool _isSomeoneTyping = false;
   bool _disposed = false;
+  bool _suppressNextAutoScroll = false;
   int _typingRequest = 0;
 
   bool get isSomeoneTyping => _isSomeoneTyping;
+  String? get oldestMessageId {
+    for (final message in _messages) {
+      final id = message.id;
+      if (id != null && id.isNotEmpty) return id;
+    }
+    return null;
+  }
 
   TranscriptState({required this.vsync, required List<Message> messages})
-    : _messages = messages;
+    : _messages = List.of(messages);
 
   // ── Public API ────────────────────────────────────────────────────────────
 
@@ -132,12 +141,50 @@ class TranscriptState extends ChangeNotifier {
   void addMessage(Message message) {
     _typingRequest++;
     _isSomeoneTyping = false;
+    _messages.add(message);
     _showMessage(message);
+  }
+
+  void prependMessages(List<Message> messages) {
+    if (messages.isEmpty || _disposed) return;
+
+    final knownIds = _messages.map((message) => message.id).whereType<String>();
+    final known = knownIds.toSet();
+    final fresh = messages
+        .where((message) => message.id == null || !known.contains(message.id))
+        .toList();
+    if (fresh.isEmpty) return;
+
+    _messages.insertAll(0, fresh);
+    _rebuildVisibleEntries();
+    _suppressNextAutoScroll = true;
+    notifyListeners();
+  }
+
+  void replaceMessage(Message replacement) {
+    final id = replacement.id;
+    if (id == null || _disposed) return;
+    final index = _messages.indexWhere((message) => message.id == id);
+    if (index < 0) return;
+    _messages[index] = replacement;
+    _rebuildVisibleEntries();
+    _suppressNextAutoScroll = true;
+    notifyListeners();
+  }
+
+  bool takeSuppressNextAutoScroll() {
+    final value = _suppressNextAutoScroll;
+    _suppressNextAutoScroll = false;
+    return value;
   }
 
   // ── Internal ───────────────────────────────────────────────────────────────
 
-  void _showMessage(Message message) {
+  void _showMessage(
+    Message message, {
+    bool animate = true,
+    bool notify = true,
+  }) {
     final position = _entries.length;
 
     // Base line coordinates (horizontal shift applied later during finalization)
@@ -176,7 +223,11 @@ class TranscriptState extends ChangeNotifier {
     state.avatarBgScale = Tween<double>(begin: 0.6, end: 1.0).animate(
       CurvedAnimation(parent: state.avatarBgCtrl, curve: Curves.easeOutBack),
     );
-    state.avatarBgCtrl.forward();
+    if (animate) {
+      state.avatarBgCtrl.forward();
+    } else {
+      state.avatarBgCtrl.value = 1.0;
+    }
 
     state.avatarFgCtrl = AnimationController(
       vsync: vsync,
@@ -185,9 +236,13 @@ class TranscriptState extends ChangeNotifier {
     state.avatarFgScale = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: state.avatarFgCtrl, curve: Curves.easeOutBack),
     );
-    Future.delayed(const Duration(milliseconds: 160), () {
-      if (!state.disposed) state.avatarFgCtrl.forward();
-    });
+    if (animate) {
+      Future.delayed(const Duration(milliseconds: 160), () {
+        if (!state.disposed) state.avatarFgCtrl.forward();
+      });
+    } else {
+      state.avatarFgCtrl.value = 1.0;
+    }
 
     state.msgHCtrl = AnimationController(
       vsync: vsync,
@@ -196,7 +251,11 @@ class TranscriptState extends ChangeNotifier {
     state.msgHScale = Tween<double>(begin: 0.3, end: 1.0).animate(
       CurvedAnimation(parent: state.msgHCtrl, curve: Curves.easeOutBack),
     );
-    state.msgHCtrl.forward();
+    if (animate) {
+      state.msgHCtrl.forward();
+    } else {
+      state.msgHCtrl.value = 1.0;
+    }
 
     state.msgVCtrl = AnimationController(
       vsync: vsync,
@@ -205,7 +264,11 @@ class TranscriptState extends ChangeNotifier {
     state.msgVScale = Tween<double>(begin: 0.8, end: 1.0).animate(
       CurvedAnimation(parent: state.msgVCtrl, curve: Curves.easeOutBack),
     );
-    state.msgVCtrl.forward();
+    if (animate) {
+      state.msgVCtrl.forward();
+    } else {
+      state.msgVCtrl.value = 1.0;
+    }
 
     state.msgAlphaCtrl = AnimationController(
       vsync: vsync,
@@ -215,9 +278,13 @@ class TranscriptState extends ChangeNotifier {
       begin: 0.0,
       end: 1.0,
     ).animate(state.msgAlphaCtrl);
-    Future.delayed(const Duration(milliseconds: 100), () {
-      if (!state.disposed) state.msgAlphaCtrl.forward();
-    });
+    if (animate) {
+      Future.delayed(const Duration(milliseconds: 100), () {
+        if (!state.disposed) state.msgAlphaCtrl.forward();
+      });
+    } else {
+      state.msgAlphaCtrl.value = 1.0;
+    }
 
     state.lineCtrl = AnimationController(
       vsync: vsync,
@@ -239,7 +306,7 @@ class TranscriptState extends ChangeNotifier {
           (state.message.sender == Sender.ren && state.message.isAnimatedMedia);
       if (skipsOutgoingMedia) {
         _entries.add(state);
-        notifyListeners();
+        if (notify) notifyListeners();
         return;
       }
       // Skip jitter for image messages — their line is anchored at a fixed center
@@ -272,11 +339,26 @@ class TranscriptState extends ChangeNotifier {
         }
       }
 
-      prev.lineCtrl.forward();
+      if (animate) {
+        prev.lineCtrl.forward();
+      } else {
+        prev.lineCtrl.value = 1.0;
+      }
     }
 
     _entries.add(state);
-    notifyListeners();
+    if (notify) notifyListeners();
+  }
+
+  void _rebuildVisibleEntries() {
+    for (final entry in _entries) {
+      entry.dispose();
+    }
+    _entries.clear();
+    _messageIndex = 0;
+    while (_messageIndex < _messages.length) {
+      _showMessage(_messages[_messageIndex++], animate: false, notify: false);
+    }
   }
 
   @override
@@ -293,7 +375,15 @@ class TranscriptState extends ChangeNotifier {
 
 class Transcript extends StatefulWidget {
   final TranscriptState state;
-  const Transcript({super.key, required this.state});
+  final Future<bool> Function()? onLoadOlder;
+  final double bottomPadding;
+
+  const Transcript({
+    super.key,
+    required this.state,
+    this.onLoadOlder,
+    this.bottomPadding = 180,
+  });
 
   @override
   State<Transcript> createState() => _TranscriptState();
@@ -301,32 +391,88 @@ class Transcript extends StatefulWidget {
 
 class _TranscriptState extends State<Transcript> {
   final _scrollCtrl = ScrollController();
+  bool _loadingOlder = false;
 
   @override
   void initState() {
     super.initState();
     widget.state.addListener(_onStateChanged);
+    _scrollCtrl.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
   }
 
   @override
   void dispose() {
     widget.state.removeListener(_onStateChanged);
+    _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
     super.dispose();
   }
 
   void _onStateChanged() {
     if (!mounted) return;
+    final preservePosition = widget.state.takeSuppressNextAutoScroll();
     setState(() {});
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_scrollCtrl.hasClients) {
-        _scrollCtrl.animateTo(
-          _scrollCtrl.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 280),
-          curve: Curves.easeInOut,
+      if (preservePosition) return;
+      _animateToBottom();
+    });
+  }
+
+  void _onScroll() {
+    if (!_scrollCtrl.hasClients ||
+        _loadingOlder ||
+        widget.onLoadOlder == null) {
+      return;
+    }
+    if (_scrollCtrl.position.pixels <= 90) {
+      unawaited(_loadOlder());
+    }
+  }
+
+  Future<void> _loadOlder() async {
+    final onLoadOlder = widget.onLoadOlder;
+    if (onLoadOlder == null || !_scrollCtrl.hasClients) return;
+
+    _loadingOlder = true;
+    final beforeMaxExtent = _scrollCtrl.position.maxScrollExtent;
+    final beforePixels = _scrollCtrl.position.pixels;
+    bool loaded;
+    try {
+      loaded = await onLoadOlder();
+    } catch (_) {
+      _loadingOlder = false;
+      return;
+    }
+    if (!mounted) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollCtrl.hasClients) return;
+      if (loaded) {
+        final delta = _scrollCtrl.position.maxScrollExtent - beforeMaxExtent;
+        _scrollCtrl.jumpTo(
+          (beforePixels + delta).clamp(
+            _scrollCtrl.position.minScrollExtent,
+            _scrollCtrl.position.maxScrollExtent,
+          ),
         );
       }
+      _loadingOlder = false;
     });
+  }
+
+  void _jumpToBottom() {
+    if (!_scrollCtrl.hasClients) return;
+    _scrollCtrl.jumpTo(_scrollCtrl.position.maxScrollExtent);
+  }
+
+  void _animateToBottom() {
+    if (!_scrollCtrl.hasClients) return;
+    _scrollCtrl.animateTo(
+      _scrollCtrl.position.maxScrollExtent,
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeInOut,
+    );
   }
 
   @override
@@ -338,7 +484,7 @@ class _TranscriptState extends State<Transcript> {
         // Clear the fixed-height ChatHeader, including two-line chat titles.
         top: MediaQuery.of(context).padding.top + 142,
         // Extra 80 dp so the last item clears the floating InputBar (~70 dp)
-        bottom: 180 + MediaQuery.of(context).padding.bottom,
+        bottom: widget.bottomPadding + MediaQuery.of(context).padding.bottom,
       ),
       itemCount: entries.length,
       separatorBuilder: (context, index) =>

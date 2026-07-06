@@ -13,6 +13,7 @@ import 'chat_repository.dart';
 /// updates so the UI already behaves like it is backed by a real service.
 class MockChatRepository implements ChatRepository {
   final _messageController = StreamController<Message>.broadcast();
+  final _messageUpdateController = StreamController<Message>.broadcast();
   final _chatController = StreamController<List<ChatSummary>>.broadcast();
   final _authController = StreamController<AuthSessionState>.broadcast();
 
@@ -24,6 +25,9 @@ class MockChatRepository implements ChatRepository {
 
   @override
   Stream<Message> get incomingMessages => _messageController.stream;
+
+  @override
+  Stream<Message> get messageUpdates => _messageUpdateController.stream;
 
   @override
   Stream<List<ChatSummary>> get chats => _chatController.stream;
@@ -66,8 +70,86 @@ class MockChatRepository implements ChatRepository {
   }
 
   @override
+  Future<List<Message>> sendPhotos(
+    String chatId,
+    List<String> paths, {
+    String caption = '',
+  }) async {
+    if (paths.isEmpty) return const [];
+    final message = Message(
+      id: _nextMessageId(),
+      chatId: chatId,
+      sender: Sender.ren,
+      text: caption,
+      createdAt: DateTime.now(),
+      status: MessageDeliveryStatus.sent,
+      imagePath: paths.first,
+      albumImagePaths: paths.length > 1 ? List.unmodifiable(paths) : const [],
+    );
+    _messagesFor(chatId).add(message);
+    return [message];
+  }
+
+  @override
+  Future<Message> sendFile(
+    String chatId,
+    String path, {
+    required String name,
+    required int size,
+    String caption = '',
+  }) async {
+    final message = Message(
+      id: _nextMessageId(),
+      chatId: chatId,
+      sender: Sender.ren,
+      text: caption,
+      createdAt: DateTime.now(),
+      status: MessageDeliveryStatus.sent,
+      filePath: path,
+      fileName: name,
+      fileSize: size,
+    );
+    _messagesFor(chatId).add(message);
+    return message;
+  }
+
+  @override
+  Future<Message> sendGif(
+    String chatId,
+    String path, {
+    String caption = '',
+  }) async {
+    final message = Message(
+      id: _nextMessageId(),
+      chatId: chatId,
+      sender: Sender.ren,
+      text: caption,
+      createdAt: DateTime.now(),
+      status: MessageDeliveryStatus.sent,
+      gifPath: path,
+    );
+    _messagesFor(chatId).add(message);
+    return message;
+  }
+
+  @override
+  Future<Message> sendSticker(String chatId, String path) async {
+    final message = Message(
+      id: _nextMessageId(),
+      chatId: chatId,
+      sender: Sender.ren,
+      createdAt: DateTime.now(),
+      status: MessageDeliveryStatus.sent,
+      stickerPath: path,
+    );
+    _messagesFor(chatId).add(message);
+    return message;
+  }
+
+  @override
   Future<void> disconnect() async {
     await _messageController.close();
+    await _messageUpdateController.close();
     await _chatController.close();
     await _authController.close();
   }
@@ -82,6 +164,14 @@ class MockChatRepository implements ChatRepository {
   Future<List<Message>> getMessages(String chatId) async {
     if (!_connected) await connect();
     return List.unmodifiable(_messagesFor(chatId));
+  }
+
+  @override
+  Future<List<Message>> getMessagesBefore(
+    String chatId,
+    String beforeMessageId,
+  ) async {
+    return const [];
   }
 
   @override
@@ -119,6 +209,22 @@ class MockChatRepository implements ChatRepository {
   }
 
   @override
+  Future<void> submitEmailAddress(String emailAddress) async {
+    _setAuthState(
+      const AuthSessionState(
+        stage: AuthStage.waitEmailCode,
+        emailAddressPattern: 'm***@example.com',
+        canResendCode: true,
+      ),
+    );
+  }
+
+  @override
+  Future<void> submitEmailCode(String code) async {
+    _setAuthState(_authState.copyWith(stage: AuthStage.waitCode));
+  }
+
+  @override
   Future<void> submitCode(String code) async {
     final value = code.trim();
     if (value.isEmpty) {
@@ -137,6 +243,24 @@ class MockChatRepository implements ChatRepository {
   @override
   Future<void> submitPassword(String password) async {
     _setAuthState(const AuthSessionState.ready());
+  }
+
+  @override
+  Future<void> submitRegistration(String firstName, String lastName) async {
+    _setAuthState(const AuthSessionState.ready());
+  }
+
+  @override
+  Future<void> resendAuthenticationCode() async {}
+
+  @override
+  Future<void> requestQrCodeAuthentication() async {
+    _setAuthState(
+      const AuthSessionState(
+        stage: AuthStage.waitOtherDevice,
+        otherDeviceLink: 'tg://login?token=mock',
+      ),
+    );
   }
 
   @override

@@ -36,6 +36,7 @@ class EntryBubble extends StatelessWidget {
             avatar: PersonaAvatar(
               sender: message.sender,
               imagePath: message.avatarPath,
+              fallbackLabel: message.avatarLabel,
               backgroundScale: avatarBackgroundScale,
               foregroundScale: avatarForegroundScale,
             ),
@@ -45,11 +46,6 @@ class EntryBubble extends StatelessWidget {
               messageVerticalScale: messageVerticalScale,
               messageTextAlpha: messageTextAlpha,
             ),
-          ),
-          Positioned(
-            right: 4,
-            top: -13,
-            child: PunctuationBadge(text: message.text),
           ),
         ],
       ),
@@ -157,32 +153,38 @@ class _EntryTextBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isLong = text.length > 280;
-    return CustomPaint(
-      painter: _EntryBubblePainter(
-        hScale: messageHorizontalScale,
-        vScale: messageVerticalScale,
-      ),
-      child: Opacity(
-        opacity: messageTextAlpha.clamp(0.0, 1.0),
-        child: Padding(
-          padding: EdgeInsets.only(
-            left: isLong ? 38 : 42,
-            top: isLong ? 16 : 20,
-            right: isLong ? 28 : 32,
-            bottom: isLong ? 16 : 20,
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        CustomPaint(
+          painter: _EntryBubblePainter(
+            hScale: messageHorizontalScale,
+            vScale: messageVerticalScale,
           ),
-          child: Text(
-            text,
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: isLong ? 12.5 : 14,
-              height: isLong ? 1.18 : null,
-              fontFamily: 'OptimaNova',
-              fontWeight: FontWeight.w900,
+          child: Opacity(
+            opacity: messageTextAlpha.clamp(0.0, 1.0),
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: isLong ? 38 : 42,
+                top: isLong ? 16 : 20,
+                right: isLong ? 28 : 32,
+                bottom: isLong ? 16 : 20,
+              ),
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: isLong ? 12.5 : 14,
+                  height: isLong ? 1.18 : null,
+                  fontFamily: 'OptimaNova',
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
             ),
           ),
         ),
-      ),
+        Positioned(right: 8, top: -13, child: PunctuationBadge(text: text)),
+      ],
     );
   }
 }

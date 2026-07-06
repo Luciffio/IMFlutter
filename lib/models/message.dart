@@ -53,6 +53,10 @@ class Message {
   final String? fileName;
   final int? fileSize;
   final String? avatarPath;
+  final String? avatarLabel;
+  final List<String> albumImagePaths;
+  final String? mediaAlbumId;
+  final MessageKind mediaKind;
 
   const Message({
     this.id,
@@ -68,24 +72,64 @@ class Message {
     this.fileName,
     this.fileSize,
     this.avatarPath,
+    this.avatarLabel,
+    this.albumImagePaths = const [],
+    this.mediaAlbumId,
+    this.mediaKind = MessageKind.text,
   });
 
-  bool get isImage => imagePath != null;
-  bool get isSticker => stickerPath != null;
-  bool get isGif => gifPath != null;
-  bool get isFile => filePath != null;
+  bool get isImage =>
+      mediaKind == MessageKind.image ||
+      imagePath != null ||
+      albumImagePaths.isNotEmpty;
+  bool get isSticker => mediaKind == MessageKind.sticker || stickerPath != null;
+  bool get isGif => mediaKind == MessageKind.gif || gifPath != null;
+  bool get isFile => mediaKind == MessageKind.file || filePath != null;
   bool get isAnimatedMedia => isSticker || isGif;
   String? get animatedMediaPath => gifPath ?? stickerPath;
+  List<String> get imagePaths {
+    if (albumImagePaths.isNotEmpty) return albumImagePaths;
+    final path = imagePath;
+    return path == null ? const [] : [path];
+  }
 
   MessageKind get kind {
     if (isImage) return MessageKind.image;
     if (isFile) return MessageKind.file;
     if (isGif) return MessageKind.gif;
     if (isSticker) return MessageKind.sticker;
-    return MessageKind.text;
+    return mediaKind;
   }
 
   bool get isOutgoing => sender == Sender.ren;
+
+  Message copyWith({
+    String? imagePath,
+    String? stickerPath,
+    String? gifPath,
+    String? filePath,
+    List<String>? albumImagePaths,
+  }) {
+    return Message(
+      id: id,
+      chatId: chatId,
+      sender: sender,
+      text: text,
+      createdAt: createdAt,
+      status: status,
+      imagePath: imagePath ?? this.imagePath,
+      stickerPath: stickerPath ?? this.stickerPath,
+      gifPath: gifPath ?? this.gifPath,
+      filePath: filePath ?? this.filePath,
+      fileName: fileName,
+      fileSize: fileSize,
+      avatarPath: avatarPath,
+      avatarLabel: avatarLabel,
+      albumImagePaths: albumImagePaths ?? this.albumImagePaths,
+      mediaAlbumId: mediaAlbumId,
+      mediaKind: mediaKind,
+    );
+  }
 }
 
 final List<Message> kMessages = [

@@ -10,8 +10,29 @@ abstract class ChatRepository {
   /// Send a text message to a concrete chat.
   Future<void> sendMessage(String chatId, String text);
 
+  Future<List<Message>> sendPhotos(
+    String chatId,
+    List<String> paths, {
+    String caption = '',
+  });
+
+  Future<Message> sendFile(
+    String chatId,
+    String path, {
+    required String name,
+    required int size,
+    String caption = '',
+  });
+
+  Future<Message> sendGif(String chatId, String path, {String caption = ''});
+
+  Future<Message> sendSticker(String chatId, String path);
+
   /// Stream of messages received from other participants.
   Stream<Message> get incomingMessages;
+
+  /// Existing messages whose downloaded media became available locally.
+  Stream<Message> get messageUpdates;
 
   /// Live chat list updates. Backends should emit whenever unread counts,
   /// ordering, pinned state, previews, or activity changes.
@@ -35,6 +56,12 @@ abstract class ChatRepository {
   /// Telegram will map this to getChatHistory.
   Future<List<Message>> getMessages(String chatId);
 
+  /// Older messages before the currently oldest visible message.
+  Future<List<Message>> getMessagesBefore(
+    String chatId,
+    String beforeMessageId,
+  );
+
   /// Mark a chat as opened/read from the app's point of view.
   Future<void> markChatOpened(String chatId);
 
@@ -46,9 +73,19 @@ abstract class ChatRepository {
 
   Future<void> submitPhoneNumber(String phoneNumber);
 
+  Future<void> submitEmailAddress(String emailAddress);
+
+  Future<void> submitEmailCode(String code);
+
   Future<void> submitCode(String code);
 
   Future<void> submitPassword(String password);
+
+  Future<void> submitRegistration(String firstName, String lastName);
+
+  Future<void> resendAuthenticationCode();
+
+  Future<void> requestQrCodeAuthentication();
 
   Future<void> cancelAuthentication();
 

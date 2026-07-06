@@ -28,6 +28,7 @@ class MainApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: kPersonaRed,
+        fontFamilyFallback: const ['Bitter'],
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {
             TargetPlatform.android: _NoTransitionsBuilder(),
@@ -258,7 +259,10 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   TranscriptState? _transcriptState;
   StreamSubscription<Message>? _incomingSub;
+  StreamSubscription<Message>? _messageUpdateSub;
   bool _usesLiveHistory = false;
+  bool _loadingOlderMessages = false;
+  bool _hasMoreOlderMessages = true;
 
   @override
   void initState() {
@@ -270,11 +274,17 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         _transcriptState?.addMessage(msg);
       }
     });
+    _messageUpdateSub = widget.repository.messageUpdates.listen((msg) {
+      if (msg.chatId == widget.chat.id) {
+        _transcriptState?.replaceMessage(msg);
+      }
+    });
   }
 
   @override
   void dispose() {
     _incomingSub?.cancel();
+    _messageUpdateSub?.cancel();
     _transcriptState?.dispose();
     super.dispose();
   }
@@ -313,39 +323,79 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     unawaited(widget.repository.sendMessage(widget.chat.id, text));
   }
 
-  void _onSendImage(String path) {
-    _transcriptState?.addMessage(
-      Message(sender: Sender.ren, chatId: widget.chat.id, imagePath: path),
+  Future<void> _onSendPhotos(List<String> paths, String caption) async {
+    final messages = await widget.repository.sendPhotos(
+      widget.chat.id,
+      paths,
+      caption: caption,
     );
+    for (final message in messages) {
+      _transcriptState?.addMessage(message);
+    }
   }
 
-  void _onSendFile(String path, String name, int size) {
-    _transcriptState?.addMessage(
-      Message(
-        chatId: widget.chat.id,
-        sender: Sender.ren,
-        filePath: path,
-        fileName: name,
-        fileSize: size,
-      ),
+  Future<void> _onSendFile(
+    String path,
+    String name,
+    int size,
+    String caption,
+  ) async {
+    final message = await widget.repository.sendFile(
+      widget.chat.id,
+      path,
+      name: name,
+      size: size,
+      caption: caption,
     );
+    _transcriptState?.addMessage(message);
   }
 
-  void _onSendSticker(String path) {
-    _transcriptState?.addMessage(
-      Message(sender: Sender.ren, chatId: widget.chat.id, stickerPath: path),
-    );
+  Future<void> _onSendSticker(String path) async {
+    final message = await widget.repository.sendSticker(widget.chat.id, path);
+    _transcriptState?.addMessage(message);
   }
 
-  void _onSendGif(String path) {
-    _transcriptState?.addMessage(
-      Message(sender: Sender.ren, chatId: widget.chat.id, gifPath: path),
+  Future<void> _onSendGif(String path, String caption) async {
+    final message = await widget.repository.sendGif(
+      widget.chat.id,
+      path,
+      caption: caption,
     );
+    _transcriptState?.addMessage(message);
+  }
+
+  Future<bool> _loadOlderMessages() async {
+    final state = _transcriptState;
+    final oldestId = state?.oldestMessageId;
+    if (state == null ||
+        oldestId == null ||
+        _loadingOlderMessages ||
+        !_hasMoreOlderMessages) {
+      return false;
+    }
+
+    _loadingOlderMessages = true;
+    try {
+      final older = await widget.repository.getMessagesBefore(
+        widget.chat.id,
+        oldestId,
+      );
+      if (!mounted) return false;
+      if (older.isEmpty) {
+        _hasMoreOlderMessages = false;
+        return false;
+      }
+      state.prependMessages(older);
+      return true;
+    } finally {
+      _loadingOlderMessages = false;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final transcriptState = _transcriptState;
+    final canSendMessages = widget.chat.type != ChatType.channel;
 
     // Best-effort mapping from the chat's participants back to the hardcoded
     // [Sender] enum so the existing ChatHeader can render its avatar strip.
@@ -371,7 +421,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               onTap: _usesLiveHistory
                   ? null
                   : transcriptState.advanceAfterTyping,
-              child: Transcript(state: transcriptState),
+              child: Transcript(
+                state: transcriptState,
+                onLoadOlder: _usesLiveHistory ? _loadOlderMessages : null,
+                bottomPadding: canSendMessages ? 180 : 78,
+              ),
             ),
 
           Align(
@@ -383,22 +437,23 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
             ),
           ),
 
-          Align(
-            alignment: Alignment.bottomCenter,
-            child: transcriptState == null
-                ? const SizedBox.shrink()
-                : AnimatedBuilder(
-                    animation: transcriptState,
-                    builder: (context, _) => InputBar(
-                      showTypingIndicator: transcriptState.isSomeoneTyping,
-                      onSend: _onSend,
-                      onSendImage: _onSendImage,
-                      onSendFile: _onSendFile,
-                      onSendSticker: _onSendSticker,
-                      onSendGif: _onSendGif,
+          if (canSendMessages)
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: transcriptState == null
+                  ? const SizedBox.shrink()
+                  : AnimatedBuilder(
+                      animation: transcriptState,
+                      builder: (context, _) => InputBar(
+                        showTypingIndicator: transcriptState.isSomeoneTyping,
+                        onSend: _onSend,
+                        onSendPhotos: _onSendPhotos,
+                        onSendFile: _onSendFile,
+                        onSendSticker: _onSendSticker,
+                        onSendGif: _onSendGif,
+                      ),
                     ),
-                  ),
-          ),
+            ),
         ],
       ),
     );

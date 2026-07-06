@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../models/message.dart';
 
 // Large image bubble — Persona 5 IM photo style:
@@ -42,25 +43,48 @@ class ImageBubble extends StatelessWidget {
           alignment: Alignment.center,
           child: SizedBox(
             width: frameW,
-            height: containerH,
-            child: Stack(
-              clipBehavior: Clip.none,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                // Badge drawn FIRST → behind the frame
-                if (_hasSenderBadge)
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: _SenderBadge(message: message),
+                SizedBox(
+                  width: frameW,
+                  height: containerH,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      // Badge drawn FIRST → behind the frame
+                      if (_hasSenderBadge)
+                        Positioned(
+                          right: 0,
+                          bottom: 0,
+                          child: _SenderBadge(message: message),
+                        ),
+                      // Frame drawn SECOND → in front, overlaps badge's top-left.
+                      // top: topPad ensures the rotation overflow stays within the item
+                      // and doesn't bleed into the gap above (where the shadow lives).
+                      Positioned(
+                        left: 0,
+                        top: topPad,
+                        child: Semantics(
+                          button: true,
+                          label: 'Open image',
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: message.imagePaths.length == 1
+                                ? () => _openFullScreen(
+                                    context,
+                                    message.imagePaths.first,
+                                  )
+                                : null,
+                            child: _buildFrame(context, frameW, frameH),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                // Frame drawn SECOND → in front, overlaps badge's top-left.
-                // top: topPad ensures the rotation overflow stays within the item
-                // and doesn't bleed into the gap above (where the shadow lives).
-                Positioned(
-                  left: 0,
-                  top: topPad,
-                  child: _buildFrame(frameW, frameH),
                 ),
+                if (message.text.trim().isNotEmpty)
+                  _ImageCaption(message: message),
               ],
             ),
           ),
@@ -71,24 +95,45 @@ class ImageBubble extends StatelessWidget {
 
   bool get _hasSenderBadge {
     final avatar = message.avatarPath;
+    final label = message.avatarLabel;
     return message.sender.portraitAsset != null ||
-        (avatar != null && avatar.isNotEmpty);
+        (avatar != null && avatar.isNotEmpty) ||
+        (label != null && label.trim().isNotEmpty);
   }
 
   // Bundled assets start with "assets/"; anything else is a file path from
   // the gallery (image_picker) and must be rendered with Image.file.
   Widget _imageFor(String path) {
-    if (path.startsWith('assets/')) {
-      return Image.asset(path, fit: BoxFit.cover);
-    }
-    return Image.file(
-      File(path),
-      fit: BoxFit.cover,
-      errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+    return _renderImage(path, fit: BoxFit.cover);
+  }
+
+  void _openFullScreen(BuildContext context, String imagePath) {
+    Navigator.of(context, rootNavigator: true).push(
+      PageRouteBuilder<void>(
+        opaque: true,
+        barrierColor: Colors.black,
+        transitionDuration: const Duration(milliseconds: 180),
+        reverseTransitionDuration: const Duration(milliseconds: 150),
+        pageBuilder: (_, _, _) => _FullScreenImageViewer(imagePath: imagePath),
+        transitionsBuilder: (_, animation, _, child) {
+          final curved = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutCubic,
+            reverseCurve: Curves.easeInCubic,
+          );
+          return FadeTransition(
+            opacity: curved,
+            child: ScaleTransition(
+              scale: Tween(begin: 0.94, end: 1.0).animate(curved),
+              child: child,
+            ),
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildFrame(double w, double h) {
+  Widget _buildFrame(BuildContext context, double w, double h) {
     return Transform(
       transform: Matrix4.diagonal3Values(hScale, vScale, 1.0),
       alignment: Alignment.center,
@@ -109,7 +154,14 @@ class ImageBubble extends StatelessWidget {
                   clipper: const _FrameClipper(),
                   child: Opacity(
                     opacity: alpha.clamp(0.0, 1.0),
-                    child: _imageFor(message.imagePath!),
+                    child: message.imagePaths.isEmpty
+                        ? const _MediaLoadingPlaceholder(label: 'PHOTO')
+                        : message.imagePaths.length > 1
+                        ? _AlbumGrid(
+                            paths: message.imagePaths,
+                            onOpen: (path) => _openFullScreen(context, path),
+                          )
+                        : _imageFor(message.imagePaths.first),
                   ),
                 ),
               ),
@@ -119,6 +171,182 @@ class ImageBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MediaLoadingPlaceholder extends StatelessWidget {
+  final String label;
+
+  const _MediaLoadingPlaceholder({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return ColoredBox(
+      color: const Color(0xFF171717),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 28,
+              height: 28,
+              child: CircularProgressIndicator(
+                color: Color(0xFFF70000),
+                strokeWidth: 4,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontFamily: 'OptimaNova',
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AlbumGrid extends StatelessWidget {
+  final List<String> paths;
+  final ValueChanged<String> onOpen;
+
+  const _AlbumGrid({required this.paths, required this.onOpen});
+
+  @override
+  Widget build(BuildContext context) {
+    final visible = paths.take(4).toList();
+    return GridView.builder(
+      padding: EdgeInsets.zero,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        mainAxisSpacing: 3,
+        crossAxisSpacing: 3,
+      ),
+      itemCount: visible.length,
+      itemBuilder: (context, index) {
+        final path = visible[index];
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => onOpen(path),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              _renderImage(path, fit: BoxFit.cover),
+              if (index == 3 && paths.length > 4)
+                ColoredBox(
+                  color: Colors.black54,
+                  child: Center(
+                    child: Text(
+                      '+${paths.length - 3}',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontFamily: 'OptimaNova',
+                        fontSize: 28,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ImageCaption extends StatelessWidget {
+  final Message message;
+
+  const _ImageCaption({required this.message});
+
+  @override
+  Widget build(BuildContext context) {
+    final outgoing = message.isOutgoing;
+    final foreground = outgoing ? Colors.black : Colors.white;
+    final background = outgoing ? Colors.white : Colors.black;
+    final border = outgoing ? Colors.black : Colors.white;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 4, 18, 10),
+      child: Align(
+        alignment: outgoing ? Alignment.centerRight : Alignment.centerLeft,
+        child: Transform.rotate(
+          angle: outgoing ? 0.012 : -0.012,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 330),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: background,
+              border: Border.all(color: border, width: 4),
+              boxShadow: const [
+                BoxShadow(color: Colors.black, offset: Offset(7, 8)),
+              ],
+            ),
+            child: Text(
+              message.text.trim(),
+              style: TextStyle(
+                color: foreground,
+                fontFamily: 'OptimaNova',
+                fontSize: 14,
+                height: 1.2,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _FullScreenImageViewer extends StatelessWidget {
+  final String imagePath;
+
+  const _FullScreenImageViewer({required this.imagePath});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light.copyWith(
+        statusBarColor: Colors.black,
+        systemNavigationBarColor: Colors.black,
+        systemNavigationBarDividerColor: Colors.black,
+      ),
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: () => Navigator.of(context).pop(),
+          child: InteractiveViewer(
+            minScale: 1,
+            maxScale: 5,
+            boundaryMargin: const EdgeInsets.all(80),
+            child: SizedBox.expand(
+              child: _renderImage(imagePath, fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+Widget _renderImage(String path, {required BoxFit fit}) {
+  if (path.startsWith('assets/')) {
+    return Image.asset(path, fit: fit);
+  }
+  return Image.file(
+    File(path),
+    fit: fit,
+    errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
+  );
 }
 
 // ── Sender badge ─────────────────────────────────────────────────────────────
@@ -169,6 +397,24 @@ class _SenderBadge extends StatelessWidget {
 
   Widget _fallbackPortrait() {
     final portrait = message.sender.portraitAsset;
+    final label = message.avatarLabel?.trim();
+    if (label != null && label.isNotEmpty) {
+      final visibleText = label.substring(0, label.length.clamp(1, 2));
+      return ColoredBox(
+        color: Colors.white,
+        child: Center(
+          child: Text(
+            visibleText.toUpperCase(),
+            style: const TextStyle(
+              color: Colors.black,
+              fontFamily: 'OptimaNova',
+              fontSize: 28,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      );
+    }
     if (portrait == null) return const SizedBox.shrink();
 
     return Image.asset(

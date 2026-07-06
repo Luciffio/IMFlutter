@@ -1,10 +1,26 @@
-enum AuthStage { signedOut, waitPhone, waitCode, waitPassword, ready }
+enum AuthStage {
+  signedOut,
+  waitPhone,
+  waitEmailAddress,
+  waitEmailCode,
+  waitCode,
+  waitOtherDevice,
+  waitRegistration,
+  waitPassword,
+  ready,
+}
 
 class AuthSessionState {
   final AuthStage stage;
   final bool isLoading;
   final String? phoneNumber;
   final String? codeDeliveryMessage;
+  final String? emailAddressPattern;
+  final String? otherDeviceLink;
+  final String? registrationTerms;
+  final bool canResendCode;
+  final int resendTimeoutSeconds;
+  final bool codeIsNumeric;
   final String? errorMessage;
 
   const AuthSessionState({
@@ -12,6 +28,12 @@ class AuthSessionState {
     this.isLoading = false,
     this.phoneNumber,
     this.codeDeliveryMessage,
+    this.emailAddressPattern,
+    this.otherDeviceLink,
+    this.registrationTerms,
+    this.canResendCode = false,
+    this.resendTimeoutSeconds = 0,
+    this.codeIsNumeric = true,
     this.errorMessage,
   });
 
@@ -26,6 +48,12 @@ class AuthSessionState {
     bool? isLoading,
     String? phoneNumber,
     String? codeDeliveryMessage,
+    String? emailAddressPattern,
+    String? otherDeviceLink,
+    String? registrationTerms,
+    bool? canResendCode,
+    int? resendTimeoutSeconds,
+    bool? codeIsNumeric,
     String? errorMessage,
     bool clearError = false,
     bool clearCodeDelivery = false,
@@ -37,6 +65,12 @@ class AuthSessionState {
       codeDeliveryMessage: clearCodeDelivery
           ? null
           : codeDeliveryMessage ?? this.codeDeliveryMessage,
+      emailAddressPattern: emailAddressPattern ?? this.emailAddressPattern,
+      otherDeviceLink: otherDeviceLink ?? this.otherDeviceLink,
+      registrationTerms: registrationTerms ?? this.registrationTerms,
+      canResendCode: canResendCode ?? this.canResendCode,
+      resendTimeoutSeconds: resendTimeoutSeconds ?? this.resendTimeoutSeconds,
+      codeIsNumeric: codeIsNumeric ?? this.codeIsNumeric,
       errorMessage: clearError ? null : errorMessage ?? this.errorMessage,
     );
   }

@@ -6,20 +6,25 @@ import 'package:image_picker/image_picker.dart';
 import 'composer_panel.dart';
 import 'typing_indicator.dart';
 
-typedef SendFileCallback = void Function(String path, String name, int size);
+typedef SendPhotosCallback =
+    Future<void> Function(List<String> paths, String caption);
+typedef SendFileCallback =
+    Future<void> Function(String path, String name, int size, String caption);
+typedef SendMediaCallback = Future<void> Function(String path, String caption);
+typedef SendStickerCallback = Future<void> Function(String path);
 
 class InputBar extends StatefulWidget {
   final ValueChanged<String>? onSend;
-  final ValueChanged<String>? onSendImage;
+  final SendPhotosCallback? onSendPhotos;
   final SendFileCallback? onSendFile;
-  final ValueChanged<String>? onSendSticker;
-  final ValueChanged<String>? onSendGif;
+  final SendStickerCallback? onSendSticker;
+  final SendMediaCallback? onSendGif;
   final bool showTypingIndicator;
 
   const InputBar({
     super.key,
     this.onSend,
-    this.onSendImage,
+    this.onSendPhotos,
     this.onSendFile,
     this.onSendSticker,
     this.onSendGif,
@@ -35,6 +40,7 @@ class _InputBarState extends State<InputBar> {
   final _focusNode = FocusNode();
   final _imagePicker = ImagePicker();
   ComposerPanelMode _panelMode = ComposerPanelMode.none;
+  bool _isSendingMedia = false;
 
   void _send() {
     final text = _controller.text.trim();
@@ -45,14 +51,18 @@ class _InputBarState extends State<InputBar> {
 
   Future<void> _pickImage() async {
     try {
-      final file = await _imagePicker.pickImage(
-        source: ImageSource.gallery,
+      final files = await _imagePicker.pickMultiImage(
         maxWidth: 1920,
         maxHeight: 1920,
         imageQuality: 90,
       );
-      if (file == null) return;
-      widget.onSendImage?.call(file.path);
+      if (files.isEmpty) return;
+      await _runMediaSend(
+        (caption) => widget.onSendPhotos?.call(
+          files.take(10).map((file) => file.path).toList(),
+          caption,
+        ),
+      );
       _closePanel();
     } catch (error) {
       debugPrint('Image picker error: $error');
@@ -65,7 +75,10 @@ class _InputBarState extends State<InputBar> {
       final file = result?.files.single;
       final path = file?.path;
       if (file == null || path == null) return;
-      widget.onSendFile?.call(path, file.name, file.size);
+      await _runMediaSend(
+        (caption) =>
+            widget.onSendFile?.call(path, file.name, file.size, caption),
+      );
       _closePanel();
     } catch (error) {
       debugPrint('File picker error: $error');
@@ -93,6 +106,37 @@ class _InputBarState extends State<InputBar> {
       text: text,
       selection: TextSelection.collapsed(offset: start + emoji.length),
     );
+  }
+
+  Future<void> _runMediaSend(
+    Future<void>? Function(String caption) send,
+  ) async {
+    if (_isSendingMedia) return;
+    final caption = _controller.text.trim();
+    setState(() => _isSendingMedia = true);
+    try {
+      await send(caption);
+      if (_controller.text.trim() == caption) _controller.clear();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.black,
+          content: Text(
+            'MEDIA FAILED: $error',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFFF70000),
+              fontFamily: 'OptimaNova',
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSendingMedia = false);
+    }
   }
 
   @override
@@ -143,12 +187,14 @@ class _InputBarState extends State<InputBar> {
                       onPickFile: _pickFile,
                       onEmojiSelected: _insertEmoji,
                       onGifSelected: (path) {
-                        widget.onSendGif?.call(path);
                         _closePanel();
+                        _runMediaSend(
+                          (caption) => widget.onSendGif?.call(path, caption),
+                        );
                       },
                       onStickerSelected: (path) {
-                        widget.onSendSticker?.call(path);
                         _closePanel();
+                        _runMediaSend((_) => widget.onSendSticker?.call(path));
                       },
                     ),
                   ),
@@ -241,14 +287,24 @@ class _InputBarState extends State<InputBar> {
                     Padding(
                       padding: const EdgeInsets.fromLTRB(10, 12, 14, 12),
                       child: GestureDetector(
-                        onTap: _send,
-                        child: const SizedBox(
+                        onTap: _isSendingMedia ? null : _send,
+                        child: SizedBox(
                           width: 30,
                           height: 30,
-                          child: Padding(
-                            padding: EdgeInsets.all(6),
-                            child: CustomPaint(painter: _TrianglePainter()),
-                          ),
+                          child: _isSendingMedia
+                              ? const Padding(
+                                  padding: EdgeInsets.all(5),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3,
+                                    color: Color(0xFFF70000),
+                                  ),
+                                )
+                              : const Padding(
+                                  padding: EdgeInsets.all(6),
+                                  child: CustomPaint(
+                                    painter: _TrianglePainter(),
+                                  ),
+                                ),
                         ),
                       ),
                     ),

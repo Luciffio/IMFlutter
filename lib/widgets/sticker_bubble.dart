@@ -32,8 +32,8 @@ class StickerBubble extends StatelessWidget {
     this.alpha = 1.0,
   });
 
-  String get _path => message.animatedMediaPath!;
-  String get _lowerPath => _path.toLowerCase();
+  String? get _path => message.animatedMediaPath;
+  String get _lowerPath => _path?.toLowerCase() ?? '';
   bool get _isLottie => _lowerPath.endsWith('.tgs');
   bool get _isVideo =>
       _lowerPath.endsWith('.webm') ||
@@ -44,71 +44,106 @@ class StickerBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     const totalHeight = _kSize > kAvatarHeight ? _kSize : kAvatarHeight + 0.0;
 
-    if (message.sender == Sender.ren) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 18),
-        child: SizedBox(
-          height: totalHeight,
-          child: Align(
-            alignment: Alignment.centerRight,
-            child: Transform.scale(
-              scale: scale,
-              alignment: Alignment.centerRight,
-              child: Opacity(
-                opacity: alpha.clamp(0.0, 1.0),
-                child: SizedBox(width: _kSize, height: _kSize, child: _media()),
-              ),
-            ),
-          ),
-        ),
-      );
-    }
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
-      child: SizedBox(
-        height: totalHeight,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              left: 0,
-              top: 0,
-              child: PersonaAvatar(
-                sender: message.sender,
-                imagePath: message.avatarPath,
-                backgroundScale: avatarBackgroundScale,
-                foregroundScale: avatarForegroundScale,
-              ),
-            ),
-            Positioned(
-              left: kAvatarWidth - _kOverlap + _kExtraLeft,
-              top: (totalHeight - _kSize) / 2,
-              child: Transform.scale(
-                scale: scale,
-                alignment: Alignment.centerLeft,
-                child: Opacity(
-                  opacity: alpha.clamp(0.0, 1.0),
-                  child: SizedBox(
-                    width: _kSize,
-                    height: _kSize,
-                    child: _media(),
+    final mediaBubble = message.sender == Sender.ren
+        ? Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 18),
+            child: SizedBox(
+              height: totalHeight,
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: Transform.scale(
+                  scale: scale,
+                  alignment: Alignment.centerRight,
+                  child: Opacity(
+                    opacity: alpha.clamp(0.0, 1.0),
+                    child: SizedBox(
+                      width: _kSize,
+                      height: _kSize,
+                      child: _media(),
+                    ),
                   ),
                 ),
               ),
             ),
-          ],
+          )
+        : Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: SizedBox(
+              height: totalHeight,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    child: PersonaAvatar(
+                      sender: message.sender,
+                      imagePath: message.avatarPath,
+                      backgroundScale: avatarBackgroundScale,
+                      foregroundScale: avatarForegroundScale,
+                    ),
+                  ),
+                  Positioned(
+                    left: kAvatarWidth - _kOverlap + _kExtraLeft,
+                    top: (totalHeight - _kSize) / 2,
+                    child: Transform.scale(
+                      scale: scale,
+                      alignment: Alignment.centerLeft,
+                      child: Opacity(
+                        opacity: alpha.clamp(0.0, 1.0),
+                        child: SizedBox(
+                          width: _kSize,
+                          height: _kSize,
+                          child: _media(),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+
+    if (!message.isGif || message.text.trim().isEmpty) return mediaBubble;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        mediaBubble,
+        Padding(
+          padding: const EdgeInsets.fromLTRB(26, 2, 26, 8),
+          child: Align(
+            alignment: message.isOutgoing
+                ? Alignment.centerRight
+                : Alignment.centerLeft,
+            child: Container(
+              color: message.isOutgoing ? Colors.white : Colors.black,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Text(
+                message.text,
+                style: TextStyle(
+                  color: message.isOutgoing ? Colors.black : Colors.white,
+                  fontFamily: 'OptimaNova',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
         ),
-      ),
+      ],
     );
   }
 
   Widget _media() {
-    if (_isLottie) return _TgsSticker(path: _path, size: _kSize);
-    if (_isVideo) return _WebmSticker(path: _path, size: _kSize);
-    if (!_path.startsWith('assets/')) {
+    final path = _path;
+    if (path == null || path.isEmpty) {
+      return const _StickerLoadingPlaceholder();
+    }
+    if (_isLottie) return _TgsSticker(path: path, size: _kSize);
+    if (_isVideo) return _WebmSticker(path: path, size: _kSize);
+    if (!path.startsWith('assets/')) {
       return Image.file(
-        File(_path),
+        File(path),
         width: _kSize,
         height: _kSize,
         fit: BoxFit.contain,
@@ -116,11 +151,29 @@ class StickerBubble extends StatelessWidget {
       );
     }
     return Image.asset(
-      _path,
+      path,
       width: _kSize,
       height: _kSize,
       fit: BoxFit.contain,
       errorBuilder: (_, _, _) => const _StickerPlaceholder(),
+    );
+  }
+}
+
+class _StickerLoadingPlaceholder extends StatelessWidget {
+  const _StickerLoadingPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: SizedBox(
+        width: 34,
+        height: 34,
+        child: CircularProgressIndicator(
+          color: Color(0xFFF70000),
+          strokeWidth: 5,
+        ),
+      ),
     );
   }
 }

@@ -39,84 +39,114 @@ class FileBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(70, 4, 18, 4),
-      child: Transform(
-        transform: Matrix4.diagonal3Values(hScale, vScale, 1),
-        alignment: Alignment.centerRight,
-        child: Opacity(
-          opacity: alpha.clamp(0, 1),
-          child: Transform.rotate(
-            angle: -0.025,
-            child: CustomPaint(
-              painter: const _FilePanelPainter(),
-              child: SizedBox(
-                height: 86,
-                child: Row(
-                  children: [
-                    const SizedBox(width: 18),
-                    CustomPaint(
-                      painter: const _FileIconPainter(),
-                      child: SizedBox(
-                        width: 54,
-                        height: 58,
-                        child: Center(
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 9),
-                            child: Text(
-                              _extension,
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontFamily: 'OptimaNova',
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
+      child: Column(
+        crossAxisAlignment: message.isOutgoing
+            ? CrossAxisAlignment.end
+            : CrossAxisAlignment.start,
+        children: [
+          Transform(
+            transform: Matrix4.diagonal3Values(hScale, vScale, 1),
+            alignment: Alignment.centerRight,
+            child: Opacity(
+              opacity: alpha.clamp(0, 1),
+              child: Transform.rotate(
+                angle: -0.025,
+                child: CustomPaint(
+                  painter: const _FilePanelPainter(),
+                  child: SizedBox(
+                    height: 86,
+                    child: Row(
+                      children: [
+                        const SizedBox(width: 18),
+                        CustomPaint(
+                          painter: const _FileIconPainter(),
+                          child: SizedBox(
+                            width: 54,
+                            height: 58,
+                            child: Center(
+                              child: Padding(
+                                padding: const EdgeInsets.only(top: 9),
+                                child: Text(
+                                  _extension,
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontFamily: 'OptimaNova',
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 13),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            message.fileName ?? 'File',
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontFamily: 'OptimaNova',
-                              fontSize: 15,
-                              fontWeight: FontWeight.w900,
-                              height: 1.05,
-                            ),
+                        const SizedBox(width: 13),
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                message.fileName ?? 'File',
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontFamily: 'OptimaNova',
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w900,
+                                  height: 1.05,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                _sizeLabel,
+                                style: const TextStyle(
+                                  color: Colors.white60,
+                                  fontFamily: 'OptimaNova',
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 5),
-                          Text(
-                            _sizeLabel,
-                            style: const TextStyle(
-                              color: Colors.white60,
-                              fontFamily: 'OptimaNova',
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
+                        ),
+                        if (message.filePath == null)
+                          const SizedBox(
+                            width: 22,
+                            height: 22,
+                            child: CircularProgressIndicator(
+                              color: Color(0xFFF70000),
+                              strokeWidth: 3,
                             ),
+                          )
+                        else
+                          const Icon(
+                            Icons.download_done,
+                            color: Colors.white,
+                            size: 22,
                           ),
-                        ],
-                      ),
+                        const SizedBox(width: 20),
+                      ],
                     ),
-                    const Icon(
-                      Icons.download_done,
-                      color: Colors.white,
-                      size: 22,
-                    ),
-                    const SizedBox(width: 20),
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
+          if (message.text.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
+              child: Text(
+                message.text,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontFamily: 'OptimaNova',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -7,6 +7,7 @@ import '../theme/persona_colors.dart';
 class PersonaAvatar extends StatelessWidget {
   final Sender sender;
   final String? imagePath;
+  final String? fallbackLabel;
   final double backgroundScale;
   final double foregroundScale;
 
@@ -14,6 +15,7 @@ class PersonaAvatar extends StatelessWidget {
     super.key,
     required this.sender,
     this.imagePath,
+    this.fallbackLabel,
     this.backgroundScale = 1.0,
     this.foregroundScale = 1.0,
   });
@@ -72,7 +74,13 @@ class PersonaAvatar extends StatelessWidget {
 
   Widget _fallbackPortrait() {
     final asset = sender.portraitAsset;
-    if (asset == null) return _AvatarPlaceholder(sender: sender);
+    final label = fallbackLabel?.trim();
+    if (asset == null || (label != null && label.isNotEmpty)) {
+      return _AvatarPlaceholder(
+        sender: sender,
+        label: label != null && label.isNotEmpty ? label : null,
+      );
+    }
     return Image.asset(
       asset,
       fit: BoxFit.contain,
@@ -83,14 +91,20 @@ class PersonaAvatar extends StatelessWidget {
 
 class _AvatarPlaceholder extends StatelessWidget {
   final Sender sender;
+  final String? label;
 
-  const _AvatarPlaceholder({required this.sender});
+  const _AvatarPlaceholder({required this.sender, this.label});
 
   @override
   Widget build(BuildContext context) {
+    final text = label?.trim().isNotEmpty == true
+        ? label!.trim()
+        : sender.name.substring(0, 1);
+    final visibleText = text.substring(0, text.length.clamp(1, 2));
+
     return Center(
       child: Text(
-        sender.name.substring(0, 1).toUpperCase(),
+        visibleText.toUpperCase(),
         style: const TextStyle(
           color: Colors.black,
           fontFamily: 'OptimaNova',
