@@ -4,6 +4,13 @@ enum ChatActivity { offline, online }
 
 enum ChatType { direct, group, channel }
 
+class ChatTypingUpdate {
+  final String chatId;
+  final bool isTyping;
+
+  const ChatTypingUpdate({required this.chatId, required this.isTyping});
+}
+
 /// A single participant in a chat. Mock data points [portraitAsset] at bundled
 /// assets; a real backend can replace it with a cached profile photo path.
 class ChatParticipant {
@@ -37,6 +44,7 @@ class ChatSummary {
   final DateTime? lastIncomingAt;
   final DateTime? lastOutgoingAt;
   final int unreadCount;
+  final bool isMarkedUnread;
 
   const ChatSummary({
     required this.id,
@@ -52,24 +60,16 @@ class ChatSummary {
     this.lastIncomingAt,
     this.lastOutgoingAt,
     this.unreadCount = 0,
+    this.isMarkedUnread = false,
   });
 
   bool get isPinned => pinnedAt != null;
   bool get hasNewIncoming => unreadCount > 0;
-  bool get isNew => hasNewIncoming;
-  bool get isUnread => hasNewIncoming;
+  bool get isNew => hasNewIncoming && !isMarkedUnread;
+  bool get isUnread => hasNewIncoming || isMarkedUnread;
   bool get isActive => activity == ChatActivity.online;
 
-  /// Persona's HOLD is the "we saw it, but still owe them an answer" state.
-  /// NEW takes visual priority while the incoming message is still unread.
-  bool get needsReply {
-    final incoming = lastIncomingAt;
-    if (incoming == null) return false;
-    final outgoing = lastOutgoingAt;
-    return outgoing == null || incoming.isAfter(outgoing);
-  }
-
-  bool get shouldShowHoldBadge => needsReply && !hasNewIncoming;
+  bool get shouldShowHoldBadge => isMarkedUnread;
 
   ChatSummary copyWith({
     String? id,
@@ -82,9 +82,11 @@ class ChatSummary {
     String? avatarLabel,
     ChatActivity? activity,
     DateTime? pinnedAt,
+    bool clearPinnedAt = false,
     DateTime? lastIncomingAt,
     DateTime? lastOutgoingAt,
     int? unreadCount,
+    bool? isMarkedUnread,
   }) {
     return ChatSummary(
       id: id ?? this.id,
@@ -96,10 +98,11 @@ class ChatSummary {
       avatarPath: avatarPath ?? this.avatarPath,
       avatarLabel: avatarLabel ?? this.avatarLabel,
       activity: activity ?? this.activity,
-      pinnedAt: pinnedAt ?? this.pinnedAt,
+      pinnedAt: clearPinnedAt ? null : pinnedAt ?? this.pinnedAt,
       lastIncomingAt: lastIncomingAt ?? this.lastIncomingAt,
       lastOutgoingAt: lastOutgoingAt ?? this.lastOutgoingAt,
       unreadCount: unreadCount ?? this.unreadCount,
+      isMarkedUnread: isMarkedUnread ?? this.isMarkedUnread,
     );
   }
 }

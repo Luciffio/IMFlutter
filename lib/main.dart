@@ -15,12 +15,22 @@ import 'widgets/chat_list_screen.dart';
 import 'widgets/input_bar.dart';
 import 'widgets/transcript.dart';
 
+const _activeAccountSlotKey = 'telegram.activeAccountSlot';
+const _accountSlotsKey = 'telegram.accountSlots';
+
 void main() {
   runApp(const MainApp());
 }
 
 class MainApp extends StatelessWidget {
-  const MainApp({super.key});
+  final int initialAccountSlot;
+  final List<int> initialAccountSlots;
+
+  const MainApp({
+    super.key,
+    this.initialAccountSlot = 0,
+    this.initialAccountSlots = const [0],
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -39,7 +49,10 @@ class MainApp extends StatelessWidget {
           },
         ),
       ),
-      home: const _RootShell(),
+      home: _RootShell(
+        initialAccountSlot: initialAccountSlot,
+        initialAccountSlots: initialAccountSlots,
+      ),
     );
   }
 }
@@ -62,7 +75,13 @@ class _NoTransitionsBuilder extends PageTransitionsBuilder {
 /// Owns the [ChatRepository] connection and routes between the chat list
 /// and an individual conversation.
 class _RootShell extends StatefulWidget {
-  const _RootShell();
+  final int initialAccountSlot;
+  final List<int> initialAccountSlots;
+
+  const _RootShell({
+    required this.initialAccountSlot,
+    required this.initialAccountSlots,
+  });
 
   @override
   State<_RootShell> createState() => _RootShellState();
@@ -78,21 +97,30 @@ class _RootShellState extends State<_RootShell> {
   static const _useTelegramBackend =
       bool.fromEnvironment('USE_TELEGRAM') || _hasTelegramCredentials;
 
-  late final ChatRepository _chatRepo;
+  late ChatRepository _chatRepo;
   StreamSubscription<AuthSessionState>? _authSub;
-  bool _showAuth = _useTelegramBackend;
+  late int _activeAccountSlot;
+  late List<int> _accountSlots;
+  int _repositoryGeneration = 0;
+  bool _showAuth = false;
   PersonaParticleMode _particleMode = PersonaParticleMode.spring;
   bool _transitionAnimationsEnabled = true;
 
   @override
   void initState() {
     super.initState();
+    _activeAccountSlot = widget.initialAccountSlot;
+    _accountSlots = [...widget.initialAccountSlots];
     _chatRepo = _createRepository();
-    _chatRepo.connect();
+    _bindRepository();
+    _loadSettings();
+  }
+
+  void _bindRepository() {
     if (_useTelegramBackend) {
       _authSub = _chatRepo.authState.listen(_syncTelegramAuthState);
     }
-    _loadSettings();
+    unawaited(_chatRepo.connect());
   }
 
   @override
@@ -107,6 +135,47 @@ class _RootShellState extends State<_RootShell> {
     final shouldShowAuth = !state.isReady;
     if (_showAuth == shouldShowAuth) return;
     setState(() => _showAuth = shouldShowAuth);
+  }
+
+  Future<void> _switchAccount(int slot) async {
+    if (!_useTelegramBackend || slot == _activeAccountSlot) return;
+    final previousRepository = _chatRepo;
+    await _authSub?.cancel();
+    _authSub = null;
+    await previousRepository.disconnect();
+
+    _activeAccountSlot = slot;
+    if (!_accountSlots.contains(slot)) {
+      _accountSlots = [..._accountSlots, slot]..sort();
+    }
+    _chatRepo = _createRepository();
+    _repositoryGeneration++;
+    _showAuth = false;
+    _bindRepository();
+    await _persistAccountState();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _addAccount() async {
+    final nextSlot = _accountSlots.isEmpty
+        ? 0
+        : _accountSlots.reduce((a, b) => a > b ? a : b) + 1;
+    await _switchAccount(nextSlot);
+  }
+
+  Future<void> _signOutCurrentAccount() async {
+    await _chatRepo.signOut();
+    if (!mounted) return;
+    setState(() => _showAuth = true);
+  }
+
+  Future<void> _persistAccountState() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_activeAccountSlotKey, _activeAccountSlot);
+    await prefs.setStringList(
+      _accountSlotsKey,
+      _accountSlots.map((slot) => slot.toString()).toList(),
+    );
   }
 
   void _openChat(BuildContext context, ChatSummary chat) {
@@ -162,11 +231,25 @@ class _RootShellState extends State<_RootShell> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
 
+    final storedActiveSlot = prefs.getInt(_activeAccountSlotKey) ?? 0;
+    final storedSlots = prefs
+        .getStringList(_accountSlotsKey)
+        ?.map(int.tryParse)
+        .whereType<int>();
+
     setState(() {
       _particleMode = _particleModeFromName(prefs.getString(_particleModeKey));
       _transitionAnimationsEnabled =
           prefs.getBool(_transitionsKey) ?? _transitionAnimationsEnabled;
+      _accountSlots = <int>{
+        0,
+        storedActiveSlot,
+        ...?storedSlots,
+      }.toList()..sort();
     });
+    if (_useTelegramBackend && storedActiveSlot != _activeAccountSlot) {
+      await _switchAccount(storedActiveSlot);
+    }
   }
 
   Future<void> _setParticleMode(PersonaParticleMode mode) async {
@@ -191,7 +274,13 @@ class _RootShellState extends State<_RootShell> {
   ChatRepository _createRepository() {
     if (!_useTelegramBackend) return MockChatRepository();
 
-    return TelegramRepository(apiId: _telegramApiId, apiHash: _telegramApiHash);
+    return TelegramRepository(
+      apiId: _telegramApiId,
+      apiHash: _telegramApiHash,
+      databaseSuffix: _activeAccountSlot == 0
+          ? ''
+          : '.account_$_activeAccountSlot',
+    );
   }
 
   @override
@@ -226,8 +315,10 @@ class _RootShellState extends State<_RootShell> {
               }),
             )
           : ChatListScreen(
-              key: const ValueKey('chat_list'),
+              key: ValueKey('chat_list_$_repositoryGeneration'),
               repository: _chatRepo,
+              accountSlots: _accountSlots,
+              activeAccountSlot: _activeAccountSlot,
               particleMode: _particleMode,
               particleSeason: particleSeason,
               transitionAnimationsEnabled: _transitionAnimationsEnabled,
@@ -235,6 +326,9 @@ class _RootShellState extends State<_RootShell> {
               onTransitionAnimationsChanged: _setTransitionAnimationsEnabled,
               onOpenChat: (chat) => _openChat(context, chat),
               onOpenAuth: () => setState(() => _showAuth = true),
+              onSwitchAccount: _switchAccount,
+              onAddAccount: _addAccount,
+              onSignOut: _signOutCurrentAccount,
             ),
     );
   }
@@ -260,6 +354,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   TranscriptState? _transcriptState;
   StreamSubscription<Message>? _incomingSub;
   StreamSubscription<Message>? _messageUpdateSub;
+  StreamSubscription<ChatTypingUpdate>? _typingSub;
+  bool _isSomeoneTyping = false;
   bool _usesLiveHistory = false;
   bool _loadingOlderMessages = false;
   bool _hasMoreOlderMessages = true;
@@ -279,12 +375,18 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         _transcriptState?.replaceMessage(msg);
       }
     });
+    _typingSub = widget.repository.typingUpdates.listen((update) {
+      if (update.chatId != widget.chat.id) return;
+      _isSomeoneTyping = update.isTyping;
+      _transcriptState?.setSomeoneTyping(update.isTyping);
+    });
   }
 
   @override
   void dispose() {
     _incomingSub?.cancel();
     _messageUpdateSub?.cancel();
+    _typingSub?.cancel();
     _transcriptState?.dispose();
     super.dispose();
   }
@@ -295,6 +397,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
 
     final usesLiveHistory = messages.any((message) => message.id != null);
     final state = TranscriptState(vsync: this, messages: messages);
+    state.setSomeoneTyping(_isSomeoneTyping);
     if (usesLiveHistory) {
       state.showAll();
     } else {

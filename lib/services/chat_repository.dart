@@ -34,6 +34,8 @@ abstract class ChatRepository {
   /// Existing messages whose downloaded media became available locally.
   Stream<Message> get messageUpdates;
 
+  Stream<ChatTypingUpdate> get typingUpdates;
+
   /// Live chat list updates. Backends should emit whenever unread counts,
   /// ordering, pinned state, previews, or activity changes.
   Stream<List<ChatSummary>> get chats;
@@ -64,6 +66,10 @@ abstract class ChatRepository {
 
   /// Mark a chat as opened/read from the app's point of view.
   Future<void> markChatOpened(String chatId);
+
+  Future<void> setChatMarkedUnread(String chatId, bool isMarkedUnread);
+
+  Future<void> setChatPinned(String chatId, bool isPinned);
 
   /// Current authentication/session state.
   Future<AuthSessionState> getAuthState();

@@ -85,6 +85,14 @@ class TranscriptState extends ChangeNotifier {
   int _typingRequest = 0;
 
   bool get isSomeoneTyping => _isSomeoneTyping;
+
+  void setSomeoneTyping(bool isTyping) {
+    if (_disposed || _isSomeoneTyping == isTyping) return;
+    _typingRequest++;
+    _isSomeoneTyping = isTyping;
+    notifyListeners();
+  }
+
   String? get oldestMessageId {
     for (final message in _messages) {
       final id = message.id;

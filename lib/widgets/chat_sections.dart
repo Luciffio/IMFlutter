@@ -21,6 +21,7 @@ class PinnedSection extends StatelessWidget {
   final List<ChatSummary> chats;
   final String? selectedChatId;
   final ValueChanged<ChatSummary> onOpenChat;
+  final ValueChanged<ChatSummary>? onChatLongPress;
   final double topPadding;
 
   const PinnedSection({
@@ -28,6 +29,7 @@ class PinnedSection extends StatelessWidget {
     required this.chats,
     required this.selectedChatId,
     required this.onOpenChat,
+    this.onChatLongPress,
     this.topPadding = 8,
   });
 
@@ -52,6 +54,9 @@ class PinnedSection extends StatelessWidget {
                 isSelected: chats[index].id == selectedChatId,
                 showHoldBadge: false,
                 onTap: () => onOpenChat(chats[index]),
+                onLongPress: onChatLongPress == null
+                    ? null
+                    : () => onChatLongPress!(chats[index]),
               ),
             ),
       ],

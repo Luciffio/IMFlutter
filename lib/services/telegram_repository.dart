@@ -1,8 +1,10 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/auth_session.dart';
 import '../models/chat_summary.dart';
@@ -18,21 +20,29 @@ class _SenderProfile {
 }
 
 class TelegramRepository implements ChatRepository {
-  static const _databaseSuffix = String.fromEnvironment('TG_DATABASE_SUFFIX');
+  static const _configuredDatabaseSuffix = String.fromEnvironment(
+    'TG_DATABASE_SUFFIX',
+  );
 
   final int apiId;
   final String apiHash;
   final TdlibGateway _gateway;
   final String? _databaseDirectoryPath;
+  final String databaseSuffix;
 
   final _messageController = StreamController<Message>.broadcast();
   final _messageUpdateController = StreamController<Message>.broadcast();
+  final _typingController = StreamController<ChatTypingUpdate>.broadcast();
   final _chatController = StreamController<List<ChatSummary>>.broadcast();
   final _authController = StreamController<AuthSessionState>.broadcast();
 
   final _chatsById = <String, ChatSummary>{};
   final _messagesByChat = <String, List<Message>>{};
   final _senderProfilesByKey = <String, _SenderProfile>{};
+  final _lastMessageIdByChatId = <String, int>{};
+  final _directUserIdByChatId = <String, int>{};
+  final _userActivityById = <int, ChatActivity>{};
+  final _typingSendersByChat = <String, Set<String>>{};
 
   StreamSubscription<TdJson>? _updatesSub;
   AuthSessionState _authState = const AuthSessionState.signedOut();
@@ -41,20 +51,28 @@ class TelegramRepository implements ChatRepository {
   var _authRequestInFlight = false;
   Future<void>? _tdlibParametersRequest;
   var _tdlibParametersAccepted = false;
+  var _chatCacheLoaded = false;
+  Future<void>? _chatRefresh;
+  Timer? _chatCacheWriteTimer;
 
   TelegramRepository({
     required this.apiId,
     required this.apiHash,
     TdlibGateway? gateway,
     String? databaseDirectoryPath,
+    String? databaseSuffix,
   }) : _gateway = gateway ?? TdlibGateway(),
-       _databaseDirectoryPath = databaseDirectoryPath;
+       _databaseDirectoryPath = databaseDirectoryPath,
+       databaseSuffix = databaseSuffix ?? _configuredDatabaseSuffix;
 
   @override
   Stream<Message> get incomingMessages => _messageController.stream;
 
   @override
   Stream<Message> get messageUpdates => _messageUpdateController.stream;
+
+  @override
+  Stream<ChatTypingUpdate> get typingUpdates => _typingController.stream;
 
   @override
   Stream<List<ChatSummary>> get chats => _chatController.stream;
@@ -66,6 +84,8 @@ class TelegramRepository implements ChatRepository {
   Future<void> connect() async {
     if (_connected) return;
     _connected = true;
+
+    await _loadChatCache();
 
     if (apiId == 0 || apiHash.isEmpty) {
       _setAuthState(
@@ -87,10 +107,15 @@ class TelegramRepository implements ChatRepository {
 
   @override
   Future<void> disconnect() async {
+    _ready = false;
+    _connected = false;
+    _chatCacheWriteTimer?.cancel();
+    await _writeChatCache();
     await _updatesSub?.cancel();
     await _gateway.close();
     await _messageController.close();
     await _messageUpdateController.close();
+    await _typingController.close();
     await _chatController.close();
     await _authController.close();
   }
@@ -206,7 +231,7 @@ class TelegramRepository implements ChatRepository {
     _tdlibParametersAccepted = false;
     _chatsById.clear();
     _messagesByChat.clear();
-    _emitChats();
+    _emitChats(persist: false);
     _setAuthState(
       _authState.copyWith(
         isLoading: true,
@@ -224,6 +249,9 @@ class TelegramRepository implements ChatRepository {
   Future<void> signOut() async {
     await _gateway.invoke({'@type': 'logOut'});
     _ready = false;
+    _chatsById.clear();
+    await _clearChatCache();
+    _emitChats(persist: false);
     _setAuthState(const AuthSessionState.signedOut());
   }
 
@@ -231,6 +259,29 @@ class TelegramRepository implements ChatRepository {
   Future<List<ChatSummary>> getChats() async {
     await connect();
     if (!_ready) return _sortedChats();
+
+    if (_chatsById.isEmpty) {
+      await _refreshChatsFromTdlib();
+    } else {
+      unawaited(_refreshChatsFromTdlib());
+    }
+    return _sortedChats();
+  }
+
+  Future<void> _refreshChatsFromTdlib() {
+    final active = _chatRefresh;
+    if (active != null) return active;
+    final refresh = _performChatRefresh().catchError((_) {
+      // Account switches and shutdown can cancel an in-flight TDLib request.
+    });
+    _chatRefresh = refresh;
+    return refresh.whenComplete(() {
+      if (identical(_chatRefresh, refresh)) _chatRefresh = null;
+    });
+  }
+
+  Future<void> _performChatRefresh() async {
+    if (!_ready) return;
 
     final result = await _gateway.invoke({
       '@type': 'getChats',
@@ -240,15 +291,28 @@ class TelegramRepository implements ChatRepository {
 
     final ids = (result['chat_ids'] as List? ?? const []);
     final visibleIds = ids.whereType<int>().map((id) => id.toString()).toSet();
-    _chatsById.removeWhere((id, _) => !visibleIds.contains(id));
+    if (visibleIds.isNotEmpty || result['total_count'] == 0) {
+      _chatsById.removeWhere((id, _) => !visibleIds.contains(id));
+    }
 
-    for (final id in ids.whereType<int>()) {
-      final chat = await _gateway.invoke({'@type': 'getChat', 'chat_id': id});
-      await _cacheChat(chat, forceVisible: true);
+    final unknownIds = ids
+        .whereType<int>()
+        .where((id) => !_chatsById.containsKey(id.toString()))
+        .toList();
+    const batchSize = 12;
+    for (var start = 0; start < unknownIds.length; start += batchSize) {
+      final end = (start + batchSize).clamp(0, unknownIds.length);
+      final chats = await Future.wait([
+        for (final id in unknownIds.sublist(start, end))
+          _gateway.invoke({'@type': 'getChat', 'chat_id': id}),
+      ]);
+      for (final chat in chats) {
+        await _cacheChat(chat, forceVisible: true);
+      }
+      _emitChats();
     }
 
     _emitChats();
-    return _sortedChats();
   }
 
   @override
@@ -370,13 +434,60 @@ class TelegramRepository implements ChatRepository {
   Future<void> markChatOpened(String chatId) async {
     final id = int.tryParse(chatId);
     if (id == null || !_ready) return;
+    final lastMessageId = _lastMessageIdByChatId[chatId];
+    if (lastMessageId != null) {
+      await _gateway.invoke({
+        '@type': 'viewMessages',
+        'chat_id': id,
+        'message_ids': [lastMessageId],
+        'source': null,
+        'force_read': true,
+      });
+    }
+    if (_chatsById[chatId]?.isMarkedUnread == true) {
+      await setChatMarkedUnread(chatId, false);
+    }
+    final current = _chatsById[chatId];
+    if (current != null && current.unreadCount != 0) {
+      _chatsById[chatId] = current.copyWith(unreadCount: 0);
+      _emitChats();
+    }
+  }
+
+  @override
+  Future<void> setChatMarkedUnread(String chatId, bool isMarkedUnread) async {
+    final id = int.tryParse(chatId);
+    if (id == null || !_ready) return;
     await _gateway.invoke({
-      '@type': 'viewMessages',
+      '@type': 'toggleChatIsMarkedAsUnread',
       'chat_id': id,
-      'message_ids': const [],
-      'source': null,
-      'force_read': true,
+      'is_marked_as_unread': isMarkedUnread,
     });
+    final current = _chatsById[chatId];
+    if (current != null) {
+      _chatsById[chatId] = current.copyWith(isMarkedUnread: isMarkedUnread);
+      _emitChats();
+    }
+  }
+
+  @override
+  Future<void> setChatPinned(String chatId, bool isPinned) async {
+    final id = int.tryParse(chatId);
+    if (id == null || !_ready) return;
+    await _gateway.invoke({
+      '@type': 'toggleChatIsPinned',
+      'chat_list': {'@type': 'chatListMain'},
+      'chat_id': id,
+      'is_pinned': isPinned,
+    });
+    final current = _chatsById[chatId];
+    if (current != null) {
+      _chatsById[chatId] = current.copyWith(
+        pinnedAt: isPinned ? DateTime.now() : null,
+        clearPinnedAt: !isPinned,
+      );
+      _emitChats();
+    }
   }
 
   @override
@@ -645,8 +756,13 @@ class TelegramRepository implements ChatRepository {
       case 'updateChatReadInbox':
       case 'updateChatReadOutbox':
       case 'updateChatUnreadMentionCount':
+      case 'updateChatIsMarkedAsUnread':
       case 'updateChatPosition':
         await _refreshChat(update['chat_id']);
+      case 'updateUserStatus':
+        _handleUserStatusUpdate(update);
+      case 'updateChatAction':
+        _handleChatActionUpdate(update);
       case 'updateNewMessage':
         final raw = update['message'];
         if (raw is TdJson) {
@@ -660,6 +776,42 @@ class TelegramRepository implements ChatRepository {
           await _refreshChat(raw['chat_id']);
         }
     }
+  }
+
+  void _handleUserStatusUpdate(TdJson update) {
+    final userId = update['user_id'];
+    if (userId is! int) return;
+    final activity = _activityFromStatus(update['status']);
+    _userActivityById[userId] = activity;
+
+    var changed = false;
+    for (final entry in _directUserIdByChatId.entries) {
+      if (entry.value != userId) continue;
+      final chat = _chatsById[entry.key];
+      if (chat == null || chat.activity == activity) continue;
+      _chatsById[entry.key] = chat.copyWith(activity: activity);
+      changed = true;
+    }
+    if (changed) _emitChats();
+  }
+
+  void _handleChatActionUpdate(TdJson update) {
+    final rawChatId = update['chat_id'];
+    if (rawChatId is! int) return;
+    final chatId = rawChatId.toString();
+    final sender = _senderKey(update['sender_id'] as TdJson?) ?? 'unknown';
+    final action = update['action'] as TdJson?;
+    final senders = _typingSendersByChat.putIfAbsent(chatId, () => <String>{});
+    final wasTyping = senders.isNotEmpty;
+    if (action?['@type'] == 'chatActionCancel') {
+      senders.remove(sender);
+    } else {
+      senders.add(sender);
+    }
+    if (senders.isEmpty) _typingSendersByChat.remove(chatId);
+    final isTyping = senders.isNotEmpty;
+    if (wasTyping == isTyping || _typingController.isClosed) return;
+    _typingController.add(ChatTypingUpdate(chatId: chatId, isTyping: isTyping));
   }
 
   Future<void> _refreshChat(Object? chatId) async {
@@ -765,7 +917,7 @@ class TelegramRepository implements ChatRepository {
     final configuredPath = _databaseDirectoryPath;
     final baseDir = configuredPath == null
         ? Directory(
-            '${(await getApplicationSupportDirectory()).path}/tdlib$_databaseSuffix',
+            '${(await getApplicationSupportDirectory()).path}/tdlib$databaseSuffix',
           )
         : Directory(configuredPath);
     final filesDir = Directory('${baseDir.path}/files');
@@ -834,9 +986,14 @@ class TelegramRepository implements ChatRepository {
   Future<ChatSummary> _mapChat(TdJson raw) async {
     final id = raw['id'] as int;
     final lastMessage = raw['last_message'] as TdJson?;
+    final lastMessageId = lastMessage?['id'];
+    if (lastMessageId is int) {
+      _lastMessageIdByChatId[id.toString()] = lastMessageId;
+    }
     final lastDate = _dateFromUnix(lastMessage?['date']);
     final isPinned = _isPinned(raw['positions']);
     final isChannel = _isChannel(raw['type']);
+    final activity = await _activityForChat(id, raw['type']);
     final photoFile = _chatPhotoFile(raw['photo'] as TdJson?);
     final avatarPath = photoFile == null ? null : _localFilePath(photoFile);
     if (avatarPath == null && photoFile != null) {
@@ -858,11 +1015,49 @@ class TelegramRepository implements ChatRepository {
       lastMessagePreview: _messagePreview(lastMessage),
       avatarPath: avatarPath,
       avatarLabel: _initials(raw['title'] as String?),
+      activity: activity,
       pinnedAt: isPinned ? DateTime.now() : null,
       lastIncomingAt: isChannel || _isOutgoing(lastMessage) ? null : lastDate,
       lastOutgoingAt: isChannel || _isOutgoing(lastMessage) ? lastDate : null,
       unreadCount: raw['unread_count'] as int? ?? 0,
+      isMarkedUnread: raw['is_marked_as_unread'] == true,
     );
+  }
+
+  Future<ChatActivity> _activityForChat(int chatId, Object? type) async {
+    if (type is! TdJson) return ChatActivity.offline;
+    final userId = switch (type['@type']) {
+      'chatTypePrivate' || 'chatTypeSecret' => type['user_id'],
+      _ => null,
+    };
+    if (userId is! int) return ChatActivity.offline;
+    final chatKey = chatId.toString();
+    _directUserIdByChatId[chatKey] = userId;
+
+    final cached = _userActivityById[userId];
+    if (cached != null) return cached;
+    final cachedChatActivity = _chatsById[chatKey]?.activity;
+    if (cachedChatActivity != null) {
+      _userActivityById[userId] = cachedChatActivity;
+      return cachedChatActivity;
+    }
+    try {
+      final user = await _gateway.invoke({
+        '@type': 'getUser',
+        'user_id': userId,
+      }, timeout: const Duration(seconds: 10));
+      final activity = _activityFromStatus(user['status']);
+      _userActivityById[userId] = activity;
+      return activity;
+    } catch (_) {
+      return ChatActivity.offline;
+    }
+  }
+
+  ChatActivity _activityFromStatus(Object? status) {
+    return status is TdJson && status['@type'] == 'userStatusOnline'
+        ? ChatActivity.online
+        : ChatActivity.offline;
   }
 
   Future<void> _hydrateChatAvatar(String chatId, TdJson file) async {
@@ -1164,8 +1359,116 @@ class TelegramRepository implements ChatRepository {
     return unique.values;
   }
 
-  void _emitChats() {
-    if (!_chatController.isClosed) _chatController.add(_sortedChats());
+  String get _chatCacheKey => databaseSuffix.isEmpty
+      ? 'telegram.chat_cache.primary'
+      : 'telegram.chat_cache.$databaseSuffix';
+
+  Future<void> _loadChatCache() async {
+    if (_chatCacheLoaded) return;
+    _chatCacheLoaded = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = prefs.getString(_chatCacheKey);
+      if (encoded == null || encoded.isEmpty) return;
+      final decoded = jsonDecode(encoded);
+      if (decoded is! List) return;
+      for (final value in decoded.whereType<Map<String, dynamic>>()) {
+        final chat = _chatFromCache(value);
+        if (chat != null) _chatsById[chat.id] = chat;
+      }
+      _emitChats(persist: false);
+    } catch (_) {
+      // A malformed cache must never block TDLib startup.
+    }
+  }
+
+  ChatSummary? _chatFromCache(TdJson value) {
+    final id = value['id'];
+    final title = value['title'];
+    final updatedAt = value['updated_at'];
+    if (id is! String || title is! String || updatedAt is! int) return null;
+    final typeName = value['type'] as String?;
+    final activityName = value['activity'] as String?;
+    final type = ChatType.values
+        .where((item) => item.name == typeName)
+        .firstOrNull;
+    final activity = ChatActivity.values
+        .where((item) => item.name == activityName)
+        .firstOrNull;
+    return ChatSummary(
+      id: id,
+      title: title,
+      type: type ?? ChatType.direct,
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(updatedAt),
+      participants: const [],
+      lastMessagePreview: value['preview'] as String?,
+      avatarPath: value['avatar_path'] as String?,
+      avatarLabel: value['avatar_label'] as String?,
+      activity: activity ?? ChatActivity.offline,
+      pinnedAt: _dateFromCache(value['pinned_at']),
+      lastIncomingAt: _dateFromCache(value['last_incoming_at']),
+      lastOutgoingAt: _dateFromCache(value['last_outgoing_at']),
+      unreadCount: value['unread_count'] as int? ?? 0,
+      isMarkedUnread: value['is_marked_unread'] == true,
+    );
+  }
+
+  DateTime? _dateFromCache(Object? value) {
+    return value is int ? DateTime.fromMillisecondsSinceEpoch(value) : null;
+  }
+
+  TdJson _chatToCache(ChatSummary chat) => {
+    'id': chat.id,
+    'title': chat.title,
+    'type': chat.type.name,
+    'updated_at': chat.updatedAt.millisecondsSinceEpoch,
+    'preview': chat.lastMessagePreview,
+    'avatar_path': chat.avatarPath,
+    'avatar_label': chat.avatarLabel,
+    'activity': chat.activity.name,
+    'pinned_at': chat.pinnedAt?.millisecondsSinceEpoch,
+    'last_incoming_at': chat.lastIncomingAt?.millisecondsSinceEpoch,
+    'last_outgoing_at': chat.lastOutgoingAt?.millisecondsSinceEpoch,
+    'unread_count': chat.unreadCount,
+    'is_marked_unread': chat.isMarkedUnread,
+  };
+
+  void _scheduleChatCacheWrite() {
+    if (!_chatCacheLoaded) return;
+    _chatCacheWriteTimer?.cancel();
+    _chatCacheWriteTimer = Timer(
+      const Duration(milliseconds: 250),
+      () => unawaited(_writeChatCache()),
+    );
+  }
+
+  Future<void> _writeChatCache() async {
+    if (!_chatCacheLoaded) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final encoded = jsonEncode([
+        for (final chat in _sortedChats()) _chatToCache(chat),
+      ]);
+      await prefs.setString(_chatCacheKey, encoded);
+    } catch (_) {
+      // Persistence is an optimization; TDLib remains the source of truth.
+    }
+  }
+
+  Future<void> _clearChatCache() async {
+    _chatCacheWriteTimer?.cancel();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_chatCacheKey);
+    } catch (_) {
+      // Logging out must still work if the platform cache is unavailable.
+    }
+  }
+
+  void _emitChats({bool persist = true}) {
+    if (_chatController.isClosed) return;
+    _chatController.add(_sortedChats());
+    if (persist) _scheduleChatCacheWrite();
   }
 
   void _setAuthState(AuthSessionState state) {

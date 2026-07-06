@@ -14,6 +14,7 @@ import 'chat_repository.dart';
 class MockChatRepository implements ChatRepository {
   final _messageController = StreamController<Message>.broadcast();
   final _messageUpdateController = StreamController<Message>.broadcast();
+  final _typingController = StreamController<ChatTypingUpdate>.broadcast();
   final _chatController = StreamController<List<ChatSummary>>.broadcast();
   final _authController = StreamController<AuthSessionState>.broadcast();
 
@@ -28,6 +29,9 @@ class MockChatRepository implements ChatRepository {
 
   @override
   Stream<Message> get messageUpdates => _messageUpdateController.stream;
+
+  @override
+  Stream<ChatTypingUpdate> get typingUpdates => _typingController.stream;
 
   @override
   Stream<List<ChatSummary>> get chats => _chatController.stream;
@@ -150,6 +154,7 @@ class MockChatRepository implements ChatRepository {
   Future<void> disconnect() async {
     await _messageController.close();
     await _messageUpdateController.close();
+    await _typingController.close();
     await _chatController.close();
     await _authController.close();
   }
@@ -176,7 +181,31 @@ class MockChatRepository implements ChatRepository {
 
   @override
   Future<void> markChatOpened(String chatId) async {
-    _updateChat(chatId, (chat) => chat.copyWith(unreadCount: 0));
+    _updateChat(
+      chatId,
+      (chat) => chat.copyWith(unreadCount: 0, isMarkedUnread: false),
+    );
+    _emitChats();
+  }
+
+  @override
+  Future<void> setChatMarkedUnread(String chatId, bool isMarkedUnread) async {
+    _updateChat(
+      chatId,
+      (chat) => chat.copyWith(isMarkedUnread: isMarkedUnread),
+    );
+    _emitChats();
+  }
+
+  @override
+  Future<void> setChatPinned(String chatId, bool isPinned) async {
+    _updateChat(
+      chatId,
+      (chat) => chat.copyWith(
+        pinnedAt: isPinned ? DateTime.now() : null,
+        clearPinnedAt: !isPinned,
+      ),
+    );
     _emitChats();
   }
 

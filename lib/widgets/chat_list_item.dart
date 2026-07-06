@@ -18,6 +18,7 @@ class ChatListItem extends StatelessWidget {
   final bool isSelected;
   final bool showHoldBadge;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const ChatListItem({
     super.key,
@@ -26,6 +27,7 @@ class ChatListItem extends StatelessWidget {
     required this.isSelected,
     this.showHoldBadge = true,
     required this.onTap,
+    this.onLongPress,
   });
 
   static const _rowHeight = 96.0;
@@ -42,6 +44,7 @@ class ChatListItem extends StatelessWidget {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
+        onLongPress: onLongPress,
         child: SizedBox(
           height: _rowHeight,
           child: Stack(

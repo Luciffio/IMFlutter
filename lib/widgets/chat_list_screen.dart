@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:flutter/services.dart';
 import 'dart:async';
 import '../models/chat_summary.dart';
 import '../services/chat_repository.dart';
@@ -10,8 +11,12 @@ import 'chat_sections.dart';
 
 enum _ChatSection { chats, pinned, search, settings, profile }
 
+enum _ChatListAction { toggleUnread, togglePinned }
+
 class ChatListScreen extends StatefulWidget {
   final ChatRepository repository;
+  final List<int> accountSlots;
+  final int activeAccountSlot;
   final PersonaParticleMode particleMode;
   final PersonaSeason particleSeason;
   final bool transitionAnimationsEnabled;
@@ -19,10 +24,15 @@ class ChatListScreen extends StatefulWidget {
   final ValueChanged<bool> onTransitionAnimationsChanged;
   final void Function(ChatSummary chat) onOpenChat;
   final VoidCallback onOpenAuth;
+  final Future<void> Function(int slot) onSwitchAccount;
+  final Future<void> Function() onAddAccount;
+  final Future<void> Function() onSignOut;
 
   const ChatListScreen({
     super.key,
     required this.repository,
+    this.accountSlots = const [0],
+    this.activeAccountSlot = 0,
     required this.particleMode,
     required this.particleSeason,
     required this.transitionAnimationsEnabled,
@@ -30,6 +40,9 @@ class ChatListScreen extends StatefulWidget {
     required this.onTransitionAnimationsChanged,
     required this.onOpenChat,
     required this.onOpenAuth,
+    required this.onSwitchAccount,
+    required this.onAddAccount,
+    required this.onSignOut,
   });
 
   @override
@@ -75,6 +88,67 @@ class _ChatListScreenState extends State<ChatListScreen> {
   void _openChat(ChatSummary chat) {
     setState(() => _selectedChatId = chat.id);
     widget.onOpenChat(chat);
+  }
+
+  Future<void> _showChatActions(ChatSummary chat) async {
+    unawaited(HapticFeedback.mediumImpact());
+    if (!mounted) return;
+    final action = await showModalBottomSheet<_ChatListAction>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      builder: (context) => _ChatActionsSheet(chat: chat),
+    );
+    if (action == null || !mounted) return;
+
+    try {
+      switch (action) {
+        case _ChatListAction.toggleUnread:
+          await widget.repository.setChatMarkedUnread(
+            chat.id,
+            !chat.isMarkedUnread,
+          );
+        case _ChatListAction.togglePinned:
+          await widget.repository.setChatPinned(chat.id, !chat.isPinned);
+      }
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: Colors.black,
+          content: Text(
+            error.toString().toUpperCase(),
+            style: const TextStyle(
+              color: Colors.white,
+              fontFamily: 'OptimaNova',
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showAccountActions() async {
+    unawaited(HapticFeedback.mediumImpact());
+    if (!mounted) return;
+    final action = await showModalBottomSheet<int>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      builder: (context) => _AccountActionsSheet(
+        accountSlots: widget.accountSlots,
+        activeAccountSlot: widget.activeAccountSlot,
+      ),
+    );
+    if (action == null || !mounted) return;
+    if (action == -1) {
+      await widget.onAddAccount();
+    } else if (action == -2) {
+      await widget.onSignOut();
+    } else {
+      await widget.onSwitchAccount(action);
+    }
   }
 
   void _selectSection(_ChatSection section) {
@@ -152,6 +226,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
               child: _BottomNavigation(
                 selected: _section,
                 onSelected: _selectSection,
+                onProfileLongPress: _showAccountActions,
               ),
             ),
           ],
@@ -177,6 +252,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
           rotation: _rotationFor(i),
           isSelected: chats[i].id == _selectedChatId,
           onTap: () => _openChat(chats[i]),
+          onLongPress: () => _showChatActions(chats[i]),
         ),
       ),
     );
@@ -193,7 +269,166 @@ class _ChatListScreenState extends State<ChatListScreen> {
       chats: chats.where((chat) => chat.isPinned).toList(),
       selectedChatId: _selectedChatId,
       onOpenChat: _openChat,
+      onChatLongPress: _showChatActions,
       topPadding: 112,
+    );
+  }
+}
+
+class _ChatActionsSheet extends StatelessWidget {
+  final ChatSummary chat;
+
+  const _ChatActionsSheet({required this.chat});
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.black,
+          border: Border(top: BorderSide(color: Colors.white, width: 4)),
+        ),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              chat.title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.white,
+                fontFamily: 'OptimaNova',
+                fontSize: 21,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 12),
+            _ChatActionButton(
+              icon: chat.isMarkedUnread
+                  ? Icons.mark_chat_read
+                  : Icons.mark_chat_unread,
+              label: chat.isMarkedUnread
+                  ? 'MARK AS READ'
+                  : 'MARK UNREAD / HOLD',
+              onTap: () => Navigator.pop(context, _ChatListAction.toggleUnread),
+            ),
+            const SizedBox(height: 8),
+            _ChatActionButton(
+              icon: chat.isPinned ? Icons.push_pin_outlined : Icons.push_pin,
+              label: chat.isPinned ? 'UNPIN CHAT' : 'PIN CHAT',
+              onTap: () => Navigator.pop(context, _ChatListAction.togglePinned),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatActionButton extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+
+  const _ChatActionButton({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(
+          height: 50,
+          child: Row(
+            children: [
+              const SizedBox(width: 14),
+              Icon(icon, color: Colors.black, size: 24),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.black,
+                    fontFamily: 'OptimaNova',
+                    fontSize: 16,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _AccountActionsSheet extends StatelessWidget {
+  final List<int> accountSlots;
+  final int activeAccountSlot;
+
+  const _AccountActionsSheet({
+    required this.accountSlots,
+    required this.activeAccountSlot,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        decoration: const BoxDecoration(
+          color: Colors.black,
+          border: Border(top: BorderSide(color: Colors.white, width: 4)),
+        ),
+        padding: const EdgeInsets.fromLTRB(18, 16, 18, 22),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'ACCOUNTS',
+              style: TextStyle(
+                color: Colors.white,
+                fontFamily: 'OptimaNova',
+                fontSize: 21,
+                fontWeight: FontWeight.w900,
+              ),
+            ),
+            const SizedBox(height: 12),
+            for (final slot in accountSlots) ...[
+              _ChatActionButton(
+                icon: slot == activeAccountSlot
+                    ? Icons.account_circle
+                    : Icons.person_outline,
+                label:
+                    'ACCOUNT ${slot + 1}${slot == activeAccountSlot ? ' / ACTIVE' : ''}',
+                onTap: () => Navigator.pop(context, slot),
+              ),
+              const SizedBox(height: 8),
+            ],
+            _ChatActionButton(
+              icon: Icons.person_add,
+              label: 'ADD ACCOUNT',
+              onTap: () => Navigator.pop(context, -1),
+            ),
+            const SizedBox(height: 8),
+            _ChatActionButton(
+              icon: Icons.logout,
+              label: 'LOG OUT',
+              onTap: () => Navigator.pop(context, -2),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -201,8 +436,13 @@ class _ChatListScreenState extends State<ChatListScreen> {
 class _BottomNavigation extends StatelessWidget {
   final _ChatSection selected;
   final ValueChanged<_ChatSection> onSelected;
+  final VoidCallback onProfileLongPress;
 
-  const _BottomNavigation({required this.selected, required this.onSelected});
+  const _BottomNavigation({
+    required this.selected,
+    required this.onSelected,
+    required this.onProfileLongPress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -250,6 +490,7 @@ class _BottomNavigation extends StatelessWidget {
                 tooltip: 'Profile',
                 isSelected: selected == _ChatSection.profile,
                 onTap: () => onSelected(_ChatSection.profile),
+                onLongPress: onProfileLongPress,
               ),
             ],
           ),
@@ -264,11 +505,13 @@ class _NavigationItem extends StatelessWidget {
   final String tooltip;
   final bool isSelected;
   final VoidCallback onTap;
+  final VoidCallback? onLongPress;
 
   const _NavigationItem({
     required this.icon,
     required this.tooltip,
     required this.onTap,
+    this.onLongPress,
     this.isSelected = false,
   });
 
@@ -276,6 +519,7 @@ class _NavigationItem extends StatelessWidget {
   Widget build(BuildContext context) {
     return Tooltip(
       message: tooltip,
+      triggerMode: TooltipTriggerMode.manual,
       child: Semantics(
         label: tooltip,
         selected: isSelected,
@@ -283,6 +527,7 @@ class _NavigationItem extends StatelessWidget {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: onTap,
+          onLongPress: onLongPress,
           child: SizedBox(
             width: 50,
             height: 50,
