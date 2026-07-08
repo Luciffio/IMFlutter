@@ -397,13 +397,15 @@ class Transcript extends StatefulWidget {
   State<Transcript> createState() => _TranscriptState();
 }
 
-class _TranscriptState extends State<Transcript> {
+class _TranscriptState extends State<Transcript> with WidgetsBindingObserver {
   final _scrollCtrl = ScrollController();
   bool _loadingOlder = false;
+  Timer? _keyboardScrollTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     widget.state.addListener(_onStateChanged);
     _scrollCtrl.addListener(_onScroll);
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToBottom());
@@ -411,10 +413,26 @@ class _TranscriptState extends State<Transcript> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _keyboardScrollTimer?.cancel();
     widget.state.removeListener(_onStateChanged);
     _scrollCtrl.removeListener(_onScroll);
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeMetrics() {
+    if (!_scrollCtrl.hasClients) return;
+    final position = _scrollCtrl.position;
+    final wasAtBottom = position.maxScrollExtent - position.pixels < 220;
+    if (!wasAtBottom) return;
+
+    _keyboardScrollTimer?.cancel();
+    _keyboardScrollTimer = Timer(const Duration(milliseconds: 55), () {
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _animateToBottom());
+    });
   }
 
   void _onStateChanged() {

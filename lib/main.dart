@@ -96,6 +96,8 @@ class _RootShellState extends State<_RootShell> {
       _telegramApiId != 0 && _telegramApiHash != '';
   static const _useTelegramBackend =
       bool.fromEnvironment('USE_TELEGRAM') || _hasTelegramCredentials;
+  static ChatRepository? _retainedTelegramRepository;
+  static int? _retainedTelegramSlot;
 
   late ChatRepository _chatRepo;
   StreamSubscription<AuthSessionState>? _authSub;
@@ -120,13 +122,19 @@ class _RootShellState extends State<_RootShell> {
     if (_useTelegramBackend) {
       _authSub = _chatRepo.authState.listen(_syncTelegramAuthState);
     }
-    unawaited(_chatRepo.connect());
+    unawaited(_connectRepository());
+  }
+
+  Future<void> _connectRepository() async {
+    await _chatRepo.connect();
+    if (!_useTelegramBackend || !mounted) return;
+    _syncTelegramAuthState(await _chatRepo.getAuthState());
   }
 
   @override
   void dispose() {
     _authSub?.cancel();
-    _chatRepo.disconnect();
+    if (!_useTelegramBackend) unawaited(_chatRepo.disconnect());
     super.dispose();
   }
 
@@ -143,6 +151,10 @@ class _RootShellState extends State<_RootShell> {
     await _authSub?.cancel();
     _authSub = null;
     await previousRepository.disconnect();
+    if (identical(_retainedTelegramRepository, previousRepository)) {
+      _retainedTelegramRepository = null;
+      _retainedTelegramSlot = null;
+    }
 
     _activeAccountSlot = slot;
     if (!_accountSlots.contains(slot)) {
@@ -241,11 +253,8 @@ class _RootShellState extends State<_RootShell> {
       _particleMode = _particleModeFromName(prefs.getString(_particleModeKey));
       _transitionAnimationsEnabled =
           prefs.getBool(_transitionsKey) ?? _transitionAnimationsEnabled;
-      _accountSlots = <int>{
-        0,
-        storedActiveSlot,
-        ...?storedSlots,
-      }.toList()..sort();
+      _accountSlots = <int>{0, storedActiveSlot, ...?storedSlots}.toList()
+        ..sort();
     });
     if (_useTelegramBackend && storedActiveSlot != _activeAccountSlot) {
       await _switchAccount(storedActiveSlot);
@@ -274,13 +283,21 @@ class _RootShellState extends State<_RootShell> {
   ChatRepository _createRepository() {
     if (!_useTelegramBackend) return MockChatRepository();
 
-    return TelegramRepository(
+    final retained = _retainedTelegramRepository;
+    if (retained != null && _retainedTelegramSlot == _activeAccountSlot) {
+      return retained;
+    }
+
+    final repository = TelegramRepository(
       apiId: _telegramApiId,
       apiHash: _telegramApiHash,
       databaseSuffix: _activeAccountSlot == 0
           ? ''
           : '.account_$_activeAccountSlot',
     );
+    _retainedTelegramRepository = repository;
+    _retainedTelegramSlot = _activeAccountSlot;
+    return repository;
   }
 
   @override
@@ -359,6 +376,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   bool _usesLiveHistory = false;
   bool _loadingOlderMessages = false;
   bool _hasMoreOlderMessages = true;
+  int? _backSwipePointer;
+  Offset? _backSwipeStart;
 
   @override
   void initState() {
@@ -495,6 +514,41 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
   }
 
+  void _onBackPointerDown(PointerDownEvent event) {
+    // The outer edge belongs to Android's system back gesture, so accept the
+    // swipe from a wider in-app strip as well.
+    if (event.position.dx > 96 || _backSwipePointer != null) return;
+    _backSwipePointer = event.pointer;
+    _backSwipeStart = event.position;
+  }
+
+  void _onBackPointerMove(PointerMoveEvent event) {
+    if (event.pointer != _backSwipePointer || _backSwipeStart == null) return;
+    final delta = event.position - _backSwipeStart!;
+    if (delta.dx < 0 || (delta.dy.abs() > 22 && delta.dy.abs() > delta.dx)) {
+      _resetBackPointer();
+      return;
+    }
+    if (delta.dx >= 72 && delta.dx > delta.dy.abs()) {
+      _resetBackPointer();
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _onBackPointerUp(PointerUpEvent event) {
+    if (event.pointer != _backSwipePointer || _backSwipeStart == null) return;
+    final delta = event.position - _backSwipeStart!;
+    _resetBackPointer();
+    if (delta.dx >= 72 && delta.dx > delta.dy.abs()) {
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _resetBackPointer() {
+    _backSwipePointer = null;
+    _backSwipeStart = null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final transcriptState = _transcriptState;
@@ -512,52 +566,62 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: kPersonaRed,
       resizeToAvoidBottomInset: true,
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: BackgroundParticles(season: widget.particleSeason),
-          ),
-          if (transcriptState == null)
-            const Center(child: CircularProgressIndicator(color: Colors.white))
-          else
-            GestureDetector(
-              onTap: _usesLiveHistory
-                  ? null
-                  : transcriptState.advanceAfterTyping,
-              child: Transcript(
-                state: transcriptState,
-                onLoadOlder: _usesLiveHistory ? _loadOlderMessages : null,
-                bottomPadding: canSendMessages ? 180 : 78,
+      body: Listener(
+        key: const ValueKey('chat_edge_back'),
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _onBackPointerDown,
+        onPointerMove: _onBackPointerMove,
+        onPointerUp: _onBackPointerUp,
+        onPointerCancel: (_) => _resetBackPointer(),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: BackgroundParticles(season: widget.particleSeason),
+            ),
+            if (transcriptState == null)
+              const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              )
+            else
+              GestureDetector(
+                onTap: _usesLiveHistory
+                    ? null
+                    : transcriptState.advanceAfterTyping,
+                child: Transcript(
+                  state: transcriptState,
+                  onLoadOlder: _usesLiveHistory ? _loadOlderMessages : null,
+                  bottomPadding: canSendMessages ? 180 : 78,
+                ),
+              ),
+
+            Align(
+              alignment: Alignment.topCenter,
+              child: ChatHeader(
+                chatName: widget.chat.title,
+                participants: participants,
+                onBack: () => Navigator.of(context).pop(),
               ),
             ),
 
-          Align(
-            alignment: Alignment.topCenter,
-            child: ChatHeader(
-              chatName: widget.chat.title,
-              participants: participants,
-              onBack: () => Navigator.of(context).pop(),
-            ),
-          ),
-
-          if (canSendMessages)
-            Align(
-              alignment: Alignment.bottomCenter,
-              child: transcriptState == null
-                  ? const SizedBox.shrink()
-                  : AnimatedBuilder(
-                      animation: transcriptState,
-                      builder: (context, _) => InputBar(
-                        showTypingIndicator: transcriptState.isSomeoneTyping,
-                        onSend: _onSend,
-                        onSendPhotos: _onSendPhotos,
-                        onSendFile: _onSendFile,
-                        onSendSticker: _onSendSticker,
-                        onSendGif: _onSendGif,
+            if (canSendMessages)
+              Align(
+                alignment: Alignment.bottomCenter,
+                child: transcriptState == null
+                    ? const SizedBox.shrink()
+                    : AnimatedBuilder(
+                        animation: transcriptState,
+                        builder: (context, _) => InputBar(
+                          showTypingIndicator: transcriptState.isSomeoneTyping,
+                          onSend: _onSend,
+                          onSendPhotos: _onSendPhotos,
+                          onSendFile: _onSendFile,
+                          onSendSticker: _onSendSticker,
+                          onSendGif: _onSendGif,
+                        ),
                       ),
-                    ),
-            ),
-        ],
+              ),
+          ],
+        ),
       ),
     );
   }

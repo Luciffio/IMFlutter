@@ -42,6 +42,7 @@ class TelegramRepository implements ChatRepository {
   final _lastMessageIdByChatId = <String, int>{};
   final _directUserIdByChatId = <String, int>{};
   final _userActivityById = <int, ChatActivity>{};
+  final _botUserIds = <int>{};
   final _typingSendersByChat = <String, Set<String>>{};
 
   StreamSubscription<TdJson>? _updatesSub;
@@ -110,9 +111,12 @@ class TelegramRepository implements ChatRepository {
     _ready = false;
     _connected = false;
     _chatCacheWriteTimer?.cancel();
+    final updatesCancel = _updatesSub?.cancel();
+    _updatesSub = null;
+    final gatewayClose = _gateway.close();
     await _writeChatCache();
-    await _updatesSub?.cancel();
-    await _gateway.close();
+    await updatesCancel;
+    await gatewayClose;
     await _messageController.close();
     await _messageUpdateController.close();
     await _typingController.close();
@@ -214,14 +218,6 @@ class TelegramRepository implements ChatRepository {
 
   @override
   Future<void> cancelAuthentication() async {
-    if (_connected) {
-      try {
-        _gateway.send({'@type': 'destroy'});
-      } catch (_) {
-        // The client may already be closed; resetting below creates a fresh one.
-      }
-    }
-
     await _updatesSub?.cancel();
     _updatesSub = null;
     _ready = false;
@@ -240,7 +236,6 @@ class TelegramRepository implements ChatRepository {
       ),
     );
 
-    await Future<void>.delayed(const Duration(milliseconds: 250));
     await _gateway.resetClient();
     await connect();
   }
@@ -761,6 +756,8 @@ class TelegramRepository implements ChatRepository {
         await _refreshChat(update['chat_id']);
       case 'updateUserStatus':
         _handleUserStatusUpdate(update);
+      case 'updateUser':
+        _handleUserUpdate(update['user'] as TdJson?);
       case 'updateChatAction':
         _handleChatActionUpdate(update);
       case 'updateNewMessage':
@@ -781,7 +778,9 @@ class TelegramRepository implements ChatRepository {
   void _handleUserStatusUpdate(TdJson update) {
     final userId = update['user_id'];
     if (userId is! int) return;
-    final activity = _activityFromStatus(update['status']);
+    final activity = _botUserIds.contains(userId)
+        ? ChatActivity.offline
+        : _activityFromStatus(update['status']);
     _userActivityById[userId] = activity;
 
     var changed = false;
@@ -790,6 +789,24 @@ class TelegramRepository implements ChatRepository {
       final chat = _chatsById[entry.key];
       if (chat == null || chat.activity == activity) continue;
       _chatsById[entry.key] = chat.copyWith(activity: activity);
+      changed = true;
+    }
+    if (changed) _emitChats();
+  }
+
+  void _handleUserUpdate(TdJson? user) {
+    if (user == null || !_isBotUser(user)) return;
+    final userId = user['id'];
+    if (userId is! int) return;
+    _botUserIds.add(userId);
+    _userActivityById[userId] = ChatActivity.offline;
+
+    var changed = false;
+    for (final entry in _directUserIdByChatId.entries) {
+      if (entry.value != userId) continue;
+      final chat = _chatsById[entry.key];
+      if (chat == null || chat.activity == ChatActivity.offline) continue;
+      _chatsById[entry.key] = chat.copyWith(activity: ChatActivity.offline);
       changed = true;
     }
     if (changed) _emitChats();
@@ -924,7 +941,7 @@ class TelegramRepository implements ChatRepository {
     await baseDir.create(recursive: true);
     await filesDir.create(recursive: true);
 
-    await _gateway.invoke({
+    final parameters = <String, dynamic>{
       '@type': 'setTdlibParameters',
       'use_test_dc': false,
       'database_directory': baseDir.path,
@@ -940,7 +957,19 @@ class TelegramRepository implements ChatRepository {
       'device_model': 'Android',
       'system_version': Platform.operatingSystemVersion,
       'application_version': '0.2.0',
-    });
+    };
+    for (var attempt = 0; attempt < 3; attempt++) {
+      try {
+        await _gateway.invoke(parameters);
+        return;
+      } catch (error) {
+        final databaseIsBusy = error.toString().toLowerCase().contains(
+          'already in use',
+        );
+        if (!databaseIsBusy || attempt == 2) rethrow;
+        await Future<void>.delayed(Duration(milliseconds: 500 * (attempt + 1)));
+      }
+    }
   }
 
   Future<void> _ensureTdlibParameters() async {
@@ -1046,6 +1075,11 @@ class TelegramRepository implements ChatRepository {
         '@type': 'getUser',
         'user_id': userId,
       }, timeout: const Duration(seconds: 10));
+      if (_isBotUser(user)) {
+        _botUserIds.add(userId);
+        _userActivityById[userId] = ChatActivity.offline;
+        return ChatActivity.offline;
+      }
       final activity = _activityFromStatus(user['status']);
       _userActivityById[userId] = activity;
       return activity;
@@ -1058,6 +1092,11 @@ class TelegramRepository implements ChatRepository {
     return status is TdJson && status['@type'] == 'userStatusOnline'
         ? ChatActivity.online
         : ChatActivity.offline;
+  }
+
+  bool _isBotUser(TdJson user) {
+    final type = user['type'];
+    return type is TdJson && type['@type'] == 'userTypeBot';
   }
 
   Future<void> _hydrateChatAvatar(String chatId, TdJson file) async {
@@ -1404,7 +1443,9 @@ class TelegramRepository implements ChatRepository {
       lastMessagePreview: value['preview'] as String?,
       avatarPath: value['avatar_path'] as String?,
       avatarLabel: value['avatar_label'] as String?,
-      activity: activity ?? ChatActivity.offline,
+      activity: type == ChatType.direct
+          ? ChatActivity.offline
+          : activity ?? ChatActivity.offline,
       pinnedAt: _dateFromCache(value['pinned_at']),
       lastIncomingAt: _dateFromCache(value['last_incoming_at']),
       lastOutgoingAt: _dateFromCache(value['last_outgoing_at']),
@@ -1592,6 +1633,11 @@ class TelegramRepository implements ChatRepository {
 
   String _authErrorText(Object error) {
     final text = error.toString();
+    final normalized = text.toLowerCase();
+    if (normalized.contains("can't lock file") ||
+        normalized.contains('already in use')) {
+      return 'TELEGRAM STORAGE IS BUSY. REOPEN THE APP';
+    }
     if (text.contains('PHONE_CODE_INVALID')) return 'WRONG CODE';
     if (text.contains('PHONE_CODE_EXPIRED')) return 'CODE EXPIRED';
     if (text.contains('PHONE_NUMBER_INVALID')) return 'WRONG PHONE NUMBER';

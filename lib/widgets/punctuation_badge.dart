@@ -31,9 +31,12 @@ class PunctuationBadge extends StatelessWidget {
       curve: Curves.easeOutBack,
       builder: (context, scale, child) =>
           Transform.scale(scale: scale, child: child),
-      child: Transform.rotate(
-        angle: kind == _PunctuationKind.question ? 0.08 : -0.08,
-        child: SvgPicture.asset(asset, width: 25, height: 34),
+      child: Transform.translate(
+        offset: Offset(kind == _PunctuationKind.exclamation ? -5 : 0, 0),
+        child: Transform.rotate(
+          angle: kind == _PunctuationKind.question ? 0.08 : -0.08,
+          child: SvgPicture.asset(asset, width: 25, height: 34),
+        ),
       ),
     );
   }

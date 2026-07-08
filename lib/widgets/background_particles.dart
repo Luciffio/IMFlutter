@@ -98,7 +98,7 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
     return IgnorePointer(
       child: LayoutBuilder(
         builder: (context, constraints) {
-          final nextSize = Size(constraints.maxWidth, constraints.maxHeight);
+          final nextSize = MediaQuery.sizeOf(context);
           if (_worldSize != nextSize) {
             _worldSize = nextSize;
             _reset();
@@ -134,6 +134,7 @@ class _BackgroundParticlesState extends State<BackgroundParticles>
     }
 
     final elapsed = _ticker.lastElapsedDuration ?? Duration.zero;
+    if (elapsed - _lastElapsed < const Duration(milliseconds: 32)) return;
     final deltaSeconds = (elapsed - _lastElapsed).inMicroseconds / 1000000.0;
     _lastElapsed = elapsed;
 

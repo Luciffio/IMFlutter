@@ -158,6 +158,39 @@ void main() {
     await repository.disconnect();
   });
 
+  test('waits for the previous TDLib client before reconnecting', () async {
+    final databaseDirectory = await Directory.systemTemp.createTemp(
+      'personagram-tdlib-close-wait-test-',
+    );
+    addTearDown(() => databaseDirectory.delete(recursive: true));
+    final resetGate = Completer<void>();
+    final gateway = _FakeTdlibGateway()
+      ..resetClientGate = resetGate
+      ..currentAuthorizationState = {
+        '@type': 'authorizationStateWaitTdlibParameters',
+      };
+    final repository = TelegramRepository(
+      apiId: 1,
+      apiHash: 'hash',
+      gateway: gateway,
+      databaseDirectoryPath: databaseDirectory.path,
+    );
+    await repository.connect();
+
+    var completed = false;
+    final cancel = repository.cancelAuthentication().whenComplete(
+      () => completed = true,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(gateway.resetClientCount, 1);
+    expect(completed, isFalse);
+
+    resetGate.complete();
+    await cancel;
+    expect(completed, isTrue);
+    await repository.disconnect();
+  });
+
   testWidgets('renders every extended authorization step', (tester) async {
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 3;
@@ -293,6 +326,7 @@ class _FakeTdlibGateway extends TdlibGateway {
   int phoneRequestCount = 0;
   int parametersRequestCount = 0;
   int resetClientCount = 0;
+  Completer<void>? resetClientGate;
   Completer<TdJson>? _phoneRequest;
   Completer<TdJson>? _parametersRequest;
 
@@ -341,6 +375,7 @@ class _FakeTdlibGateway extends TdlibGateway {
   @override
   Future<void> resetClient() async {
     resetClientCount++;
+    await resetClientGate?.future;
   }
 
   void completePhoneRequest() {

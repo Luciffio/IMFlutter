@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../models/auth_session.dart';
@@ -183,15 +182,6 @@ class _AuthScreenState extends State<AuthScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            Positioned(
-              left: 20,
-              top: 20,
-              child: SvgPicture.asset(
-                'assets/icons/logo_im.svg',
-                width: 126,
-                height: 98,
-              ),
-            ),
             Center(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(22, 120, 22, 30),

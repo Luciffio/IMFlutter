@@ -3,7 +3,7 @@
 
     <application
         android:label="IM"
-        android:name="${applicationName}"
+        android:name=".PersonaGramApplication"
         android:icon="@mipmap/ic_launcher"
         android:roundIcon="@mipmap/ic_launcher_round">
         <activity

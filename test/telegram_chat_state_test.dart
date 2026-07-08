@@ -95,6 +95,33 @@ void main() {
     expect((await typing).isTyping, isTrue);
   });
 
+  test('never exposes Telegram bots as online', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'personagram-bot-presence-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final gateway = _ChatStateGateway()..isBot = true;
+    final repository = TelegramRepository(
+      apiId: 1,
+      apiHash: 'hash',
+      gateway: gateway,
+      databaseDirectoryPath: directory.path,
+    );
+    addTearDown(repository.disconnect);
+
+    await repository.connect();
+    final chats = await repository.getChats();
+    expect(chats.single.isActive, isFalse);
+
+    gateway.emit({
+      '@type': 'updateUserStatus',
+      'user_id': 7,
+      'status': {'@type': 'userStatusOnline', 'expires': 2000000000},
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect((await repository.getChats()).single.isActive, isFalse);
+  });
+
   test('restores cached chats without requesting every chat again', () async {
     final firstDirectory = await Directory.systemTemp.createTemp(
       'personagram-chat-cache-first-',
@@ -184,6 +211,7 @@ class _ChatStateGateway extends TdlibGateway {
   final requests = <TdJson>[];
   bool isMarkedUnread = false;
   bool isPinned = false;
+  bool isBot = false;
 
   @override
   Stream<TdJson> get updates => _updates.stream;
@@ -219,6 +247,7 @@ class _ChatStateGateway extends TdlibGateway {
         'id': 7,
         'first_name': 'Online',
         'last_name': 'User',
+        'type': {'@type': isBot ? 'userTypeBot' : 'userTypeRegular'},
         'status': {'@type': 'userStatusOnline', 'expires': 2000000000},
       },
       _ => {'@type': 'ok'},

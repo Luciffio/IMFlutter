@@ -77,10 +77,10 @@ class _TypingIndicatorState extends State<TypingIndicator>
     return Align(
       alignment: Alignment.centerLeft,
       child: SizedBox(
-        width: kAvatarWidth,
-        height: kAvatarHeight,
+        width: 104,
+        height: 52,
         child: Padding(
-          padding: const EdgeInsets.only(left: 16),
+          padding: const EdgeInsets.only(left: 10),
           child: Center(
             child: AnimatedBuilder(
               animation: _scale,

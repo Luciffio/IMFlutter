@@ -6,6 +6,8 @@ import 'package:handy_tdlib/client.dart';
 typedef TdJson = Map<String, dynamic>;
 
 class TdlibGateway {
+  static Future<void> _nativeClientBarrier = Future<void>.value();
+
   final _updates = StreamController<TdJson>.broadcast();
   final _pending = <int, Completer<TdJson>>{};
 
@@ -13,22 +15,23 @@ class TdlibGateway {
   var _clientId = 0;
   var _running = false;
   var _initialized = false;
+  Future<void>? _receiveTask;
+  Future<void>? _closeTask;
+  Completer<void>? _clientClosedCompleter;
 
   Stream<TdJson> get updates => _updates.stream;
 
   Future<void> initialize() async {
     if (_initialized) return;
+    await _nativeClientBarrier;
     await TdPlugin.initialize();
     TdPlugin.instance.tdExecute(
-      jsonEncode({
-        '@type': 'setLogVerbosityLevel',
-        'new_verbosity_level': 1,
-      }),
+      jsonEncode({'@type': 'setLogVerbosityLevel', 'new_verbosity_level': 1}),
     );
     _clientId = TdPlugin.instance.tdCreateClientId();
     _running = true;
     _initialized = true;
-    unawaited(_receiveLoop());
+    _receiveTask = _receiveLoop();
   }
 
   Future<TdJson> invoke(
@@ -60,6 +63,7 @@ class TdlibGateway {
 
   Future<void> resetClient() async {
     await initialize();
+    await _closeCurrentClient(destroy: true);
     for (final completer in _pending.values) {
       if (!completer.isCompleted) {
         completer.completeError(StateError('TDLib client reset'));
@@ -69,11 +73,23 @@ class TdlibGateway {
     _clientId = TdPlugin.instance.tdCreateClientId();
   }
 
-  Future<void> close() async {
+  Future<void> close() {
+    final existing = _closeTask;
+    if (existing != null) return existing;
+
+    final task = _performClose();
+    _closeTask = task;
+    _nativeClientBarrier = task.then<void>((_) {}, onError: (_, _) {});
+    return task;
+  }
+
+  Future<void> _performClose() async {
     if (_initialized && _running) {
-      send({'@type': 'close'});
+      await _closeCurrentClient(destroy: false);
     }
     _running = false;
+    await _receiveTask;
+    _receiveTask = null;
     for (final completer in _pending.values) {
       if (!completer.isCompleted) {
         completer.completeError(StateError('TDLib gateway closed'));
@@ -81,6 +97,28 @@ class TdlibGateway {
     }
     _pending.clear();
     await _updates.close();
+  }
+
+  Future<void> _closeCurrentClient({required bool destroy}) async {
+    final existing = _clientClosedCompleter;
+    if (existing != null) {
+      await existing.future;
+      return;
+    }
+
+    final completer = Completer<void>();
+    _clientClosedCompleter = completer;
+    send({'@type': destroy ? 'destroy' : 'close'});
+    try {
+      await completer.future.timeout(const Duration(seconds: 8));
+    } on TimeoutException {
+      // Do not deadlock account switching if a damaged native client never
+      // reports authorizationStateClosed.
+    } finally {
+      if (identical(_clientClosedCompleter, completer)) {
+        _clientClosedCompleter = null;
+      }
+    }
   }
 
   Future<void> _receiveLoop() async {
@@ -93,6 +131,17 @@ class TdlibGateway {
 
       final decoded = jsonDecode(raw);
       if (decoded is! Map<String, dynamic>) continue;
+
+      final responseClientId = decoded['@client_id'];
+      if (responseClientId is int && responseClientId != _clientId) continue;
+
+      final authorizationState = decoded['authorization_state'];
+      if (decoded['@type'] == 'updateAuthorizationState' &&
+          authorizationState is Map<String, dynamic> &&
+          authorizationState['@type'] == 'authorizationStateClosed') {
+        final completer = _clientClosedCompleter;
+        if (completer != null && !completer.isCompleted) completer.complete();
+      }
 
       final extra = decoded['@extra'];
       if (extra is int && _pending.containsKey(extra)) {
@@ -107,7 +156,7 @@ class TdlibGateway {
         continue;
       }
 
-      _updates.add(decoded);
+      if (!_updates.isClosed) _updates.add(decoded);
     }
   }
 }

@@ -285,26 +285,37 @@ class _InputBarState extends State<InputBar> {
                       ),
                     ),
                     Padding(
-                      padding: const EdgeInsets.fromLTRB(10, 12, 14, 12),
-                      child: GestureDetector(
-                        onTap: _isSendingMedia ? null : _send,
-                        child: SizedBox(
-                          width: 30,
-                          height: 30,
-                          child: _isSendingMedia
-                              ? const Padding(
-                                  padding: EdgeInsets.all(5),
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 3,
-                                    color: Color(0xFFF70000),
-                                  ),
-                                )
-                              : const Padding(
-                                  padding: EdgeInsets.all(6),
-                                  child: CustomPaint(
-                                    painter: _TrianglePainter(),
-                                  ),
-                                ),
+                      padding: const EdgeInsets.only(right: 4, bottom: 3),
+                      child: Semantics(
+                        button: true,
+                        label: 'Send message',
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTap: _isSendingMedia ? null : _send,
+                          child: SizedBox(
+                            width: 48,
+                            height: 48,
+                            child: Center(
+                              child: SizedBox(
+                                width: 30,
+                                height: 30,
+                                child: _isSendingMedia
+                                    ? const Padding(
+                                        padding: EdgeInsets.all(5),
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 3,
+                                          color: Color(0xFFF70000),
+                                        ),
+                                      )
+                                    : const Padding(
+                                        padding: EdgeInsets.all(6),
+                                        child: CustomPaint(
+                                          painter: _TrianglePainter(),
+                                        ),
+                                      ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
