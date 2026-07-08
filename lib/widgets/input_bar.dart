@@ -1,7 +1,10 @@
+import 'dart:io';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
 
 import 'composer_panel.dart';
 import 'typing_indicator.dart';
@@ -66,15 +69,16 @@ class _InputBarState extends State<InputBar> {
       _closePanel();
     } catch (error) {
       debugPrint('Image picker error: $error');
+      _showMediaFailure(error);
     }
   }
 
   Future<void> _pickFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles();
+      final result = await FilePicker.platform.pickFiles(withReadStream: true);
       final file = result?.files.single;
-      final path = file?.path;
-      if (file == null || path == null) return;
+      if (file == null) return;
+      final path = await _materializePickedFile(file);
       await _runMediaSend(
         (caption) =>
             widget.onSendFile?.call(path, file.name, file.size, caption),
@@ -82,7 +86,32 @@ class _InputBarState extends State<InputBar> {
       _closePanel();
     } catch (error) {
       debugPrint('File picker error: $error');
+      _showMediaFailure(error);
     }
+  }
+
+  Future<String> _materializePickedFile(PlatformFile file) async {
+    final path = file.path;
+    if (path != null && await File(path).exists()) return path;
+
+    final stream = file.readStream;
+    if (stream == null) {
+      throw StateError('Android did not provide access to this file');
+    }
+    final tempDir = await getTemporaryDirectory();
+    final outputDir = Directory('${tempDir.path}/picked_files');
+    await outputDir.create(recursive: true);
+    final safeName = file.name.replaceAll(RegExp(r'[^A-Za-z0-9._() -]'), '_');
+    final output = File(
+      '${outputDir.path}/${DateTime.now().microsecondsSinceEpoch}-$safeName',
+    );
+    final sink = output.openWrite();
+    try {
+      await sink.addStream(stream);
+    } finally {
+      await sink.close();
+    }
+    return output.path;
   }
 
   void _togglePanel(ComposerPanelMode mode) {
@@ -115,28 +144,34 @@ class _InputBarState extends State<InputBar> {
     final caption = _controller.text.trim();
     setState(() => _isSendingMedia = true);
     try {
-      await send(caption);
+      final operation = send(caption);
+      if (operation == null) throw StateError('Media sender is unavailable');
+      await operation;
       if (_controller.text.trim() == caption) _controller.clear();
     } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          backgroundColor: Colors.black,
-          content: Text(
-            'MEDIA FAILED: $error',
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFFF70000),
-              fontFamily: 'OptimaNova',
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-        ),
-      );
+      _showMediaFailure(error);
     } finally {
       if (mounted) setState(() => _isSendingMedia = false);
     }
+  }
+
+  void _showMediaFailure(Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: Colors.black,
+        content: Text(
+          'MEDIA FAILED: $error',
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Color(0xFFF70000),
+            fontFamily: 'OptimaNova',
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+    );
   }
 
   @override

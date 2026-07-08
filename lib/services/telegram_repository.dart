@@ -278,15 +278,27 @@ class TelegramRepository implements ChatRepository {
   Future<void> _performChatRefresh() async {
     if (!_ready) return;
 
-    final result = await _gateway.invoke({
-      '@type': 'getChats',
-      'chat_list': {'@type': 'chatListMain'},
-      'limit': 80,
-    });
-
-    final ids = (result['chat_ids'] as List? ?? const []);
+    final results = await Future.wait([
+      _gateway.invoke({
+        '@type': 'getChats',
+        'chat_list': {'@type': 'chatListMain'},
+        'limit': 80,
+      }),
+      _gateway.invoke({
+        '@type': 'getChats',
+        'chat_list': {'@type': 'chatListArchive'},
+        'limit': 80,
+      }),
+    ]);
+    final ids = <Object?>[
+      for (final result in results)
+        ...(result['chat_ids'] as List? ?? const []),
+    ];
     final visibleIds = ids.whereType<int>().map((id) => id.toString()).toSet();
-    if (visibleIds.isNotEmpty || result['total_count'] == 0) {
+    final bothListsAreEmpty = results.every(
+      (result) => result['total_count'] == 0,
+    );
+    if (visibleIds.isNotEmpty || bothListsAreEmpty) {
       _chatsById.removeWhere((id, _) => !visibleIds.contains(id));
     }
 
@@ -471,7 +483,11 @@ class TelegramRepository implements ChatRepository {
     if (id == null || !_ready) return;
     await _gateway.invoke({
       '@type': 'toggleChatIsPinned',
-      'chat_list': {'@type': 'chatListMain'},
+      'chat_list': {
+        '@type': _chatsById[chatId]?.isArchived == true
+            ? 'chatListArchive'
+            : 'chatListMain',
+      },
       'chat_id': id,
       'is_pinned': isPinned,
     });
@@ -481,6 +497,22 @@ class TelegramRepository implements ChatRepository {
         pinnedAt: isPinned ? DateTime.now() : null,
         clearPinnedAt: !isPinned,
       );
+      _emitChats();
+    }
+  }
+
+  @override
+  Future<void> setChatArchived(String chatId, bool isArchived) async {
+    final id = int.tryParse(chatId);
+    if (id == null || !_ready) return;
+    await _gateway.invoke({
+      '@type': 'addChatToList',
+      'chat_id': id,
+      'chat_list': {'@type': isArchived ? 'chatListArchive' : 'chatListMain'},
+    });
+    final current = _chatsById[chatId];
+    if (current != null) {
+      _chatsById[chatId] = current.copyWith(isArchived: isArchived);
       _emitChats();
     }
   }
@@ -559,7 +591,7 @@ class TelegramRepository implements ChatRepository {
     String caption = '',
   }) async {
     final id = await _readyChatId(chatId);
-    final inputPath = await _materializeInputPath(path);
+    final inputPath = await _materializeInputPath(path, preferredName: name);
     final raw = await _sendInputMessage(id, {
       '@type': 'inputMessageDocument',
       'document': {'@type': 'inputFileLocal', 'path': inputPath},
@@ -654,16 +686,37 @@ class TelegramRepository implements ChatRepository {
     'entities': const <Object>[],
   };
 
-  Future<String> _materializeInputPath(String path) async {
-    if (!path.startsWith('assets/')) return path;
-
-    final data = await rootBundle.load(path);
-    final supportDir = await getApplicationSupportDirectory();
-    final outputDir = Directory('${supportDir.path}/outbound_media');
+  Future<String> _materializeInputPath(
+    String path, {
+    String? preferredName,
+  }) async {
+    final supportPath =
+        _databaseDirectoryPath ?? (await getApplicationSupportDirectory()).path;
+    final outputDir = Directory('$supportPath/outbound_media');
     await outputDir.create(recursive: true);
-    final fileName = path.split('/').last;
-    final output = File('${outputDir.path}/$fileName');
-    await output.writeAsBytes(data.buffer.asUint8List(), flush: true);
+    final originalName = preferredName?.trim().isNotEmpty == true
+        ? preferredName!.trim()
+        : path.split(RegExp(r'[\\/]')).last;
+    final safeName = originalName.replaceAll(
+      RegExp(r'[^A-Za-z0-9._() -]'),
+      '_',
+    );
+    final serial = DateTime.now().microsecondsSinceEpoch;
+    final transferDir = Directory('${outputDir.path}/$serial');
+    await transferDir.create(recursive: true);
+    final output = File('${transferDir.path}/$safeName');
+
+    if (path.startsWith('assets/')) {
+      final data = await rootBundle.load(path);
+      await output.writeAsBytes(data.buffer.asUint8List(), flush: true);
+      return output.path;
+    }
+
+    final source = File(path);
+    if (!await source.exists()) {
+      throw FileSystemException('Selected file is no longer available', path);
+    }
+    await source.copy(output.path);
     return output.path;
   }
 
@@ -1003,7 +1056,9 @@ class TelegramRepository implements ChatRepository {
     if (raw == null) return;
     final rawId = raw['id'];
     if (rawId is! int) return;
-    if (!forceVisible && !_isInMainChatList(raw['positions'])) {
+    if (!forceVisible &&
+        !_isInMainChatList(raw['positions']) &&
+        !_isInArchiveChatList(raw['positions'])) {
       _chatsById.remove(rawId.toString());
       return;
     }
@@ -1050,6 +1105,7 @@ class TelegramRepository implements ChatRepository {
       lastOutgoingAt: isChannel || _isOutgoing(lastMessage) ? lastDate : null,
       unreadCount: raw['unread_count'] as int? ?? 0,
       isMarkedUnread: raw['is_marked_as_unread'] == true,
+      isArchived: _isInArchiveChatList(raw['positions']),
     );
   }
 
@@ -1451,6 +1507,7 @@ class TelegramRepository implements ChatRepository {
       lastOutgoingAt: _dateFromCache(value['last_outgoing_at']),
       unreadCount: value['unread_count'] as int? ?? 0,
       isMarkedUnread: value['is_marked_unread'] == true,
+      isArchived: value['is_archived'] == true,
     );
   }
 
@@ -1472,6 +1529,7 @@ class TelegramRepository implements ChatRepository {
     'last_outgoing_at': chat.lastOutgoingAt?.millisecondsSinceEpoch,
     'unread_count': chat.unreadCount,
     'is_marked_unread': chat.isMarkedUnread,
+    'is_archived': chat.isArchived,
   };
 
   void _scheduleChatCacheWrite() {
@@ -1704,6 +1762,14 @@ class TelegramRepository implements ChatRepository {
     return positions.whereType<TdJson>().any((position) {
       final list = position['list'];
       return list is TdJson && list['@type'] == 'chatListMain';
+    });
+  }
+
+  bool _isInArchiveChatList(Object? positions) {
+    if (positions is! List) return false;
+    return positions.whereType<TdJson>().any((position) {
+      final list = position['list'];
+      return list is TdJson && list['@type'] == 'chatListArchive';
     });
   }
 

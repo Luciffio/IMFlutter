@@ -90,6 +90,50 @@ void main() {
         'inputMessageSticker',
       ]),
     );
+    final documentRequest = gateway.requests.firstWhere((request) {
+      if (request['@type'] != 'sendMessage') return false;
+      final content = request['input_message_content'] as TdJson;
+      return content['@type'] == 'inputMessageDocument';
+    });
+    final documentContent = documentRequest['input_message_content'] as TdJson;
+    final document = documentContent['document'] as TdJson;
+    final outboundPath = document['path'] as String;
+    expect(outboundPath, isNot(file.path));
+    expect(File(outboundPath).existsSync(), isTrue);
+    expect(File(outboundPath).readAsStringSync(), 'payload');
+    expect(outboundPath, endsWith('sample.bin'));
+    expect(outboundPath.split(RegExp(r'[\\/]')).last, 'sample.bin');
+
+    await repository.disconnect();
+  });
+
+  test('rejects a file that disappeared before TDLib can read it', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'personagram-missing-media-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final gateway = _MediaGateway();
+    final repository = TelegramRepository(
+      apiId: 1,
+      apiHash: 'hash',
+      gateway: gateway,
+      databaseDirectoryPath: directory.path,
+    );
+
+    await repository.connect();
+    await expectLater(
+      repository.sendFile(
+        '42',
+        '${directory.path}/missing.bin',
+        name: 'missing.bin',
+        size: 0,
+      ),
+      throwsA(isA<FileSystemException>()),
+    );
+    expect(
+      gateway.requests.where((request) => request['@type'] == 'sendMessage'),
+      isEmpty,
+    );
 
     await repository.disconnect();
   });

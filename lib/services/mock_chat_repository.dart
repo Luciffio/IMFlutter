@@ -210,6 +210,12 @@ class MockChatRepository implements ChatRepository {
   }
 
   @override
+  Future<void> setChatArchived(String chatId, bool isArchived) async {
+    _updateChat(chatId, (chat) => chat.copyWith(isArchived: isArchived));
+    _emitChats();
+  }
+
+  @override
   Future<AuthSessionState> getAuthState() async {
     return _authState;
   }

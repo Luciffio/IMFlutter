@@ -45,6 +45,7 @@ class ChatSummary {
   final DateTime? lastOutgoingAt;
   final int unreadCount;
   final bool isMarkedUnread;
+  final bool isArchived;
 
   const ChatSummary({
     required this.id,
@@ -61,6 +62,7 @@ class ChatSummary {
     this.lastOutgoingAt,
     this.unreadCount = 0,
     this.isMarkedUnread = false,
+    this.isArchived = false,
   });
 
   bool get isPinned => pinnedAt != null;
@@ -87,6 +89,7 @@ class ChatSummary {
     DateTime? lastOutgoingAt,
     int? unreadCount,
     bool? isMarkedUnread,
+    bool? isArchived,
   }) {
     return ChatSummary(
       id: id ?? this.id,
@@ -103,6 +106,7 @@ class ChatSummary {
       lastOutgoingAt: lastOutgoingAt ?? this.lastOutgoingAt,
       unreadCount: unreadCount ?? this.unreadCount,
       isMarkedUnread: isMarkedUnread ?? this.isMarkedUnread,
+      isArchived: isArchived ?? this.isArchived,
     );
   }
 }

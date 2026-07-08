@@ -33,41 +33,50 @@ void main() {
     expect(held.shouldShowHoldBadge, isTrue);
   });
 
-  test('maps live chat state and sends unread and pin commands', () async {
-    final directory = await Directory.systemTemp.createTemp(
-      'personagram-chat-state-test-',
-    );
-    addTearDown(() => directory.delete(recursive: true));
-    final gateway = _ChatStateGateway();
-    final repository = TelegramRepository(
-      apiId: 1,
-      apiHash: 'hash',
-      gateway: gateway,
-      databaseDirectoryPath: directory.path,
-    );
-    addTearDown(repository.disconnect);
+  test(
+    'maps live chat state and sends unread, pin and archive commands',
+    () async {
+      final directory = await Directory.systemTemp.createTemp(
+        'personagram-chat-state-test-',
+      );
+      addTearDown(() => directory.delete(recursive: true));
+      final gateway = _ChatStateGateway();
+      final repository = TelegramRepository(
+        apiId: 1,
+        apiHash: 'hash',
+        gateway: gateway,
+        databaseDirectoryPath: directory.path,
+      );
+      addTearDown(repository.disconnect);
 
-    await repository.connect();
-    final chats = await repository.getChats();
-    expect(chats.single.unreadCount, 2);
-    expect(chats.single.isNew, isTrue);
-    expect(chats.single.isActive, isTrue);
+      await repository.connect();
+      final chats = await repository.getChats();
+      expect(chats.single.unreadCount, 2);
+      expect(chats.single.isNew, isTrue);
+      expect(chats.single.isActive, isTrue);
 
-    await repository.setChatMarkedUnread('42', true);
-    await repository.setChatPinned('42', true);
+      await repository.setChatMarkedUnread('42', true);
+      await repository.setChatPinned('42', true);
+      await repository.setChatArchived('42', true);
 
-    expect(
-      gateway.requests,
-      contains(containsPair('@type', 'toggleChatIsMarkedAsUnread')),
-    );
-    expect(
-      gateway.requests,
-      contains(containsPair('@type', 'toggleChatIsPinned')),
-    );
-    final updated = await repository.getChats();
-    expect(updated.single.isMarkedUnread, isTrue);
-    expect(updated.single.isPinned, isTrue);
-  });
+      expect(
+        gateway.requests,
+        contains(containsPair('@type', 'toggleChatIsMarkedAsUnread')),
+      );
+      expect(
+        gateway.requests,
+        contains(containsPair('@type', 'toggleChatIsPinned')),
+      );
+      expect(
+        gateway.requests,
+        contains(containsPair('@type', 'addChatToList')),
+      );
+      final updated = await repository.getChats();
+      expect(updated.single.isMarkedUnread, isTrue);
+      expect(updated.single.isPinned, isTrue);
+      expect(updated.single.isArchived, isTrue);
+    },
+  );
 
   test('emits typing changes from TDLib chat actions', () async {
     final directory = await Directory.systemTemp.createTemp(
@@ -204,6 +213,51 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     await repository.disconnect();
   });
+
+  testWidgets('opens archive after a right swipe held for two seconds', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final repository = MockChatRepository();
+    await repository.connect();
+    await tester.pumpWidget(
+      MaterialApp(
+        home: ChatListScreen(
+          repository: repository,
+          particleMode: PersonaParticleMode.none,
+          particleSeason: PersonaSeason.none,
+          transitionAnimationsEnabled: false,
+          onParticleModeChanged: (_) {},
+          onTransitionAnimationsChanged: (_) {},
+          onOpenChat: (_) {},
+          onOpenAuth: () {},
+          onSwitchAccount: (_) async {},
+          onAddAccount: () async {},
+          onSignOut: () async {},
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 100));
+
+    final detector = find.byKey(const ValueKey('archive_swipe_detector'));
+    final rect = tester.getRect(detector);
+    final gesture = await tester.startGesture(
+      Offset(rect.left + 72, rect.center.dy),
+    );
+    await gesture.moveBy(const Offset(90, 0));
+    await tester.pump(const Duration(milliseconds: 1900));
+    expect(find.text('ARCHIVE'), findsNothing);
+    await tester.pump(const Duration(milliseconds: 150));
+    expect(find.text('ARCHIVE'), findsOneWidget);
+    await gesture.up();
+
+    await tester.pumpWidget(const SizedBox.shrink());
+    await repository.disconnect();
+  });
 }
 
 class _ChatStateGateway extends TdlibGateway {
@@ -211,6 +265,7 @@ class _ChatStateGateway extends TdlibGateway {
   final requests = <TdJson>[];
   bool isMarkedUnread = false;
   bool isPinned = false;
+  bool isArchived = false;
   bool isBot = false;
 
   @override
@@ -235,11 +290,21 @@ class _ChatStateGateway extends TdlibGateway {
       isPinned = request['is_pinned'] == true;
       return {'@type': 'ok'};
     }
+    if (request['@type'] == 'addChatToList') {
+      final list = request['chat_list'] as TdJson?;
+      isArchived = list?['@type'] == 'chatListArchive';
+      return {'@type': 'ok'};
+    }
     return switch (request['@type']) {
       'getAuthorizationState' => {'@type': 'authorizationStateReady'},
       'getChats' => {
         '@type': 'chats',
-        'chat_ids': <int>[42],
+        'chat_ids': <int>[
+          if (((request['chat_list'] as TdJson?)?['@type'] ==
+                  'chatListArchive') ==
+              isArchived)
+            42,
+        ],
       },
       'getChat' => _chat(),
       'getUser' => {
@@ -263,7 +328,7 @@ class _ChatStateGateway extends TdlibGateway {
     'positions': [
       {
         '@type': 'chatPosition',
-        'list': {'@type': 'chatListMain'},
+        'list': {'@type': isArchived ? 'chatListArchive' : 'chatListMain'},
         'order': '100',
         'is_pinned': isPinned,
       },

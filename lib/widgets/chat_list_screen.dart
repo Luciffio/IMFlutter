@@ -11,7 +11,7 @@ import 'chat_sections.dart';
 
 enum _ChatSection { chats, pinned, search, settings, profile }
 
-enum _ChatListAction { toggleUnread, togglePinned }
+enum _ChatListAction { toggleUnread, togglePinned, toggleArchived }
 
 class ChatListScreen extends StatefulWidget {
   final ChatRepository repository;
@@ -55,6 +55,9 @@ class _ChatListScreenState extends State<ChatListScreen> {
   _ChatSection _section = _ChatSection.chats;
   late final PageController _pageController;
   StreamSubscription<List<ChatSummary>>? _chatSub;
+  Timer? _archiveHoldTimer;
+  int? _archivePointer;
+  Offset? _archiveSwipeStart;
 
   @override
   void initState() {
@@ -67,6 +70,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   @override
   void dispose() {
     _chatSub?.cancel();
+    _archiveHoldTimer?.cancel();
     _pageController.dispose();
     super.dispose();
   }
@@ -110,6 +114,8 @@ class _ChatListScreenState extends State<ChatListScreen> {
           );
         case _ChatListAction.togglePinned:
           await widget.repository.setChatPinned(chat.id, !chat.isPinned);
+        case _ChatListAction.toggleArchived:
+          await widget.repository.setChatArchived(chat.id, !chat.isArchived);
       }
     } catch (error) {
       if (!mounted) return;
@@ -169,67 +175,135 @@ class _ChatListScreenState extends State<ChatListScreen> {
   double _rotationFor(int index) =>
       ((index * 5 + 2) % 7 - 3) * 0.008; // Ã¢â€°Ë† Ã‚Â±1.4Ã‚Â°
 
+  void _onArchivePointerDown(PointerDownEvent event) {
+    if (_section != _ChatSection.chats ||
+        event.position.dx > 96 ||
+        _archivePointer != null) {
+      return;
+    }
+    _archivePointer = event.pointer;
+    _archiveSwipeStart = event.position;
+  }
+
+  void _onArchivePointerMove(PointerMoveEvent event) {
+    if (event.pointer != _archivePointer || _archiveSwipeStart == null) return;
+    final delta = event.position - _archiveSwipeStart!;
+    if (delta.dx < 0 || delta.dy.abs() > 48) {
+      _resetArchiveGesture();
+      return;
+    }
+    if (delta.dx >= 72 && _archiveHoldTimer == null) {
+      _archiveHoldTimer = Timer(const Duration(seconds: 2), () {
+        if (!mounted || _archivePointer == null) return;
+        unawaited(HapticFeedback.heavyImpact());
+        _resetArchiveGesture();
+        _openArchive();
+      });
+    }
+  }
+
+  void _resetArchiveGesture() {
+    _archiveHoldTimer?.cancel();
+    _archiveHoldTimer = null;
+    _archivePointer = null;
+    _archiveSwipeStart = null;
+  }
+
+  void _openArchive() {
+    Navigator.of(context).push(
+      PageRouteBuilder<void>(
+        transitionDuration: widget.transitionAnimationsEnabled
+            ? const Duration(milliseconds: 320)
+            : Duration.zero,
+        reverseTransitionDuration: widget.transitionAnimationsEnabled
+            ? const Duration(milliseconds: 240)
+            : Duration.zero,
+        pageBuilder: (_, _, _) => _ArchiveScreen(
+          repository: widget.repository,
+          particleSeason: widget.particleSeason,
+          onOpenChat: _openChat,
+          onChatLongPress: _showChatActions,
+        ),
+        transitionsBuilder: (_, animation, _, child) => SlideTransition(
+          position: Tween<Offset>(begin: const Offset(-1, 0), end: Offset.zero)
+              .animate(
+                CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+              ),
+          child: child,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kPersonaRed,
-      body: SafeArea(
-        bottom: false,
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: BackgroundParticles(season: widget.particleSeason),
-            ),
-            Positioned.fill(
-              child: PageView(
-                controller: _pageController,
-                onPageChanged: (index) =>
-                    setState(() => _section = _ChatSection.values[index]),
-                children: [
-                  _buildChatsSection(),
-                  _buildPinnedSection(),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 108),
-                    child: SearchSection(
-                      chats: _chats ?? const [],
-                      onOpenChat: _openChat,
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.only(top: 108),
-                    child: SettingsSection(
-                      particleMode: widget.particleMode,
-                      transitionAnimationsEnabled:
-                          widget.transitionAnimationsEnabled,
-                      onParticleModeChanged: widget.onParticleModeChanged,
-                      onTransitionAnimationsChanged:
-                          widget.onTransitionAnimationsChanged,
-                      onOpenAuth: widget.onOpenAuth,
-                    ),
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.only(top: 108),
-                    child: ProfileSection(),
-                  ),
-                ],
+      body: Listener(
+        key: const ValueKey('archive_swipe_detector'),
+        behavior: HitTestBehavior.translucent,
+        onPointerDown: _onArchivePointerDown,
+        onPointerMove: _onArchivePointerMove,
+        onPointerUp: (_) => _resetArchiveGesture(),
+        onPointerCancel: (_) => _resetArchiveGesture(),
+        child: SafeArea(
+          bottom: false,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: BackgroundParticles(season: widget.particleSeason),
               ),
-            ),
-            const Positioned(
-              left: 20,
-              top: 12,
-              child: IgnorePointer(child: _ImLogo()),
-            ),
-            Positioned(
-              left: 0,
-              right: 0,
-              bottom: 0,
-              child: _BottomNavigation(
-                selected: _section,
-                onSelected: _selectSection,
-                onProfileLongPress: _showAccountActions,
+              Positioned.fill(
+                child: PageView(
+                  controller: _pageController,
+                  onPageChanged: (index) =>
+                      setState(() => _section = _ChatSection.values[index]),
+                  children: [
+                    _buildChatsSection(),
+                    _buildPinnedSection(),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 108),
+                      child: SearchSection(
+                        chats: _chats ?? const [],
+                        onOpenChat: _openChat,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 108),
+                      child: SettingsSection(
+                        particleMode: widget.particleMode,
+                        transitionAnimationsEnabled:
+                            widget.transitionAnimationsEnabled,
+                        onParticleModeChanged: widget.onParticleModeChanged,
+                        onTransitionAnimationsChanged:
+                            widget.onTransitionAnimationsChanged,
+                        onOpenAuth: widget.onOpenAuth,
+                      ),
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.only(top: 108),
+                      child: ProfileSection(),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+              const Positioned(
+                left: 20,
+                top: 12,
+                child: IgnorePointer(child: _ImLogo()),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: _BottomNavigation(
+                  selected: _section,
+                  onSelected: _selectSection,
+                  onProfileLongPress: _showAccountActions,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -242,17 +316,18 @@ class _ChatListScreenState extends State<ChatListScreen> {
         child: CircularProgressIndicator(color: Colors.white),
       );
     }
+    final mainChats = chats.where((chat) => !chat.isArchived).toList();
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(12, 112, 12, 92),
-      itemCount: chats.length,
+      itemCount: mainChats.length,
       itemBuilder: (ctx, i) => Padding(
         padding: const EdgeInsets.symmetric(vertical: 4),
         child: ChatListItem(
-          chat: chats[i],
+          chat: mainChats[i],
           rotation: _rotationFor(i),
-          isSelected: chats[i].id == _selectedChatId,
-          onTap: () => _openChat(chats[i]),
-          onLongPress: () => _showChatActions(chats[i]),
+          isSelected: mainChats[i].id == _selectedChatId,
+          onTap: () => _openChat(mainChats[i]),
+          onLongPress: () => _showChatActions(mainChats[i]),
         ),
       ),
     );
@@ -266,11 +341,154 @@ class _ChatListScreenState extends State<ChatListScreen> {
       );
     }
     return PinnedSection(
-      chats: chats.where((chat) => chat.isPinned).toList(),
+      chats: chats.where((chat) => chat.isPinned && !chat.isArchived).toList(),
       selectedChatId: _selectedChatId,
       onOpenChat: _openChat,
       onChatLongPress: _showChatActions,
       topPadding: 112,
+    );
+  }
+}
+
+class _ArchiveScreen extends StatefulWidget {
+  final ChatRepository repository;
+  final PersonaSeason particleSeason;
+  final ValueChanged<ChatSummary> onOpenChat;
+  final Future<void> Function(ChatSummary) onChatLongPress;
+
+  const _ArchiveScreen({
+    required this.repository,
+    required this.particleSeason,
+    required this.onOpenChat,
+    required this.onChatLongPress,
+  });
+
+  @override
+  State<_ArchiveScreen> createState() => _ArchiveScreenState();
+}
+
+class _ArchiveScreenState extends State<_ArchiveScreen> {
+  StreamSubscription<List<ChatSummary>>? _subscription;
+  List<ChatSummary>? _chats;
+  String? _selectedChatId;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscription = widget.repository.chats.listen(_setChats);
+    unawaited(_loadChats());
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadChats() async {
+    _setChats(await widget.repository.getChats());
+  }
+
+  void _setChats(List<ChatSummary> chats) {
+    if (!mounted) return;
+    setState(() {
+      _chats = chats.where((chat) => chat.isArchived).toList();
+      if (_chats!.every((chat) => chat.id != _selectedChatId)) {
+        _selectedChatId = null;
+      }
+    });
+  }
+
+  double _rotationFor(int index) => ((index * 3 + 1) % 5 - 2) * 0.009;
+
+  @override
+  Widget build(BuildContext context) {
+    final chats = _chats;
+    return Scaffold(
+      backgroundColor: kPersonaRed,
+      body: SafeArea(
+        bottom: false,
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: BackgroundParticles(season: widget.particleSeason),
+            ),
+            if (chats == null)
+              const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              )
+            else if (chats.isEmpty)
+              const Center(
+                child: Text(
+                  'ARCHIVE EMPTY',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontFamily: 'OptimaNova',
+                    fontSize: 26,
+                    fontWeight: FontWeight.w900,
+                    shadows: [Shadow(color: Colors.black, blurRadius: 0)],
+                  ),
+                ),
+              )
+            else
+              ListView.builder(
+                padding: const EdgeInsets.fromLTRB(12, 108, 12, 30),
+                itemCount: chats.length,
+                itemBuilder: (context, index) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: ChatListItem(
+                    chat: chats[index],
+                    rotation: _rotationFor(index),
+                    isSelected: chats[index].id == _selectedChatId,
+                    onTap: () {
+                      setState(() => _selectedChatId = chats[index].id);
+                      widget.onOpenChat(chats[index]);
+                    },
+                    onLongPress: () => widget.onChatLongPress(chats[index]),
+                  ),
+                ),
+              ),
+            Positioned(
+              left: 18,
+              top: 12,
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => Navigator.of(context).pop(),
+                child: Transform.rotate(
+                  angle: -0.05,
+                  child: Container(
+                    width: 48,
+                    height: 46,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      border: Border.all(color: Colors.black, width: 4),
+                    ),
+                    child: const Icon(
+                      Icons.arrow_back,
+                      color: Colors.black,
+                      size: 30,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const Positioned(
+              left: 78,
+              top: 12,
+              child: Text(
+                'ARCHIVE',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontFamily: 'OptimaNova',
+                  fontSize: 34,
+                  fontWeight: FontWeight.w900,
+                  shadows: [Shadow(color: Colors.black, offset: Offset(3, 3))],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -320,6 +538,13 @@ class _ChatActionsSheet extends StatelessWidget {
               icon: chat.isPinned ? Icons.push_pin_outlined : Icons.push_pin,
               label: chat.isPinned ? 'UNPIN CHAT' : 'PIN CHAT',
               onTap: () => Navigator.pop(context, _ChatListAction.togglePinned),
+            ),
+            const SizedBox(height: 8),
+            _ChatActionButton(
+              icon: chat.isArchived ? Icons.unarchive : Icons.archive,
+              label: chat.isArchived ? 'RETURN TO CHATS' : 'ARCHIVE CHAT',
+              onTap: () =>
+                  Navigator.pop(context, _ChatListAction.toggleArchived),
             ),
           ],
         ),

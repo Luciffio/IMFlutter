@@ -71,6 +71,8 @@ abstract class ChatRepository {
 
   Future<void> setChatPinned(String chatId, bool isPinned);
 
+  Future<void> setChatArchived(String chatId, bool isArchived);
+
   /// Current authentication/session state.
   Future<AuthSessionState> getAuthState();
 
