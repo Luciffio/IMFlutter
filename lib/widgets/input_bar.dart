@@ -18,12 +18,25 @@ typedef SendFileCallback =
 typedef SendMediaCallback = Future<void> Function(String path, String caption);
 typedef SendStickerCallback = Future<void> Function(String path);
 
+class InputBarController extends ChangeNotifier {
+  int _closeRequests = 0;
+
+  int get closeRequests => _closeRequests;
+
+  void closeComposer() {
+    _closeRequests++;
+    notifyListeners();
+  }
+}
+
 class InputBar extends StatefulWidget {
   final ValueChanged<String>? onSend;
   final SendPhotosCallback? onSendPhotos;
   final SendFileCallback? onSendFile;
   final SendStickerCallback? onSendSticker;
   final SendMediaCallback? onSendGif;
+  final InputBarController? controller;
+  final ValueChanged<bool>? onComposerOpenChanged;
   final List<ComposerMediaItem> gifItems;
   final List<ComposerMediaItem> stickerItems;
   final bool showTypingIndicator;
@@ -35,6 +48,8 @@ class InputBar extends StatefulWidget {
     this.onSendFile,
     this.onSendSticker,
     this.onSendGif,
+    this.controller,
+    this.onComposerOpenChanged,
     this.gifItems = const [],
     this.stickerItems = const [],
     this.showTypingIndicator = false,
@@ -50,6 +65,38 @@ class _InputBarState extends State<InputBar> {
   final _imagePicker = ImagePicker();
   ComposerPanelMode _panelMode = ComposerPanelMode.none;
   bool _isSendingMedia = false;
+  int _handledCloseRequest = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _attachController();
+  }
+
+  @override
+  void didUpdateWidget(covariant InputBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller == widget.controller) return;
+    oldWidget.controller?.removeListener(_handleControllerUpdate);
+    _attachController();
+  }
+
+  void _attachController() {
+    final controller = widget.controller;
+    if (controller == null) return;
+    _handledCloseRequest = controller.closeRequests;
+    controller.addListener(_handleControllerUpdate);
+  }
+
+  void _handleControllerUpdate() {
+    final controller = widget.controller;
+    if (controller == null ||
+        controller.closeRequests == _handledCloseRequest) {
+      return;
+    }
+    _handledCloseRequest = controller.closeRequests;
+    _closePanel(unfocus: true);
+  }
 
   void _send() {
     final text = _controller.text.trim();
@@ -125,11 +172,14 @@ class _InputBarState extends State<InputBar> {
     setState(() {
       _panelMode = _panelMode == mode ? ComposerPanelMode.none : mode;
     });
+    widget.onComposerOpenChanged?.call(_panelMode != ComposerPanelMode.none);
   }
 
-  void _closePanel() {
+  void _closePanel({bool unfocus = false}) {
+    if (unfocus) _focusNode.unfocus();
     if (!mounted || _panelMode == ComposerPanelMode.none) return;
     setState(() => _panelMode = ComposerPanelMode.none);
+    widget.onComposerOpenChanged?.call(false);
   }
 
   void _insertEmoji(String emoji) {
@@ -182,6 +232,7 @@ class _InputBarState extends State<InputBar> {
 
   @override
   void dispose() {
+    widget.controller?.removeListener(_handleControllerUpdate);
     _controller.dispose();
     _focusNode.dispose();
     super.dispose();

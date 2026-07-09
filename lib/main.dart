@@ -383,6 +383,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   bool _hasMoreOlderMessages = true;
   List<ComposerMediaItem> _gifItems = const [];
   List<ComposerMediaItem> _stickerItems = const [];
+  final _inputBarController = InputBarController();
+  bool _isComposerOpen = false;
   int? _backSwipePointer;
   Offset? _backSwipeStart;
 
@@ -430,6 +432,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _incomingSub?.cancel();
     _messageUpdateSub?.cancel();
     _typingSub?.cancel();
+    _inputBarController.dispose();
     _transcriptState?.dispose();
     super.dispose();
   }
@@ -557,7 +560,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     }
     if (_shouldTriggerBackSwipe(delta)) {
       _resetBackPointer();
-      Navigator.of(context).pop();
+      _exitChatFromSwipe();
     }
   }
 
@@ -566,7 +569,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     final delta = event.position - _backSwipeStart!;
     _resetBackPointer();
     if (_shouldTriggerBackSwipe(delta)) {
-      Navigator.of(context).pop();
+      _exitChatFromSwipe();
     }
   }
 
@@ -588,6 +591,21 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     _backSwipeStart = null;
   }
 
+  void _exitChatFromSwipe() {
+    _closeComposer();
+    Navigator.of(context).pop();
+  }
+
+  void _closeComposer() {
+    _inputBarController.closeComposer();
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  void _setComposerOpen(bool isOpen) {
+    if (!mounted || _isComposerOpen == isOpen) return;
+    setState(() => _isComposerOpen = isOpen);
+  }
+
   @override
   Widget build(BuildContext context) {
     final transcriptState = _transcriptState;
@@ -602,64 +620,73 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
         .whereType<Sender>()
         .toList();
 
-    return Scaffold(
-      backgroundColor: kPersonaRed,
-      resizeToAvoidBottomInset: true,
-      body: Listener(
-        key: const ValueKey('chat_edge_back'),
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: _onBackPointerDown,
-        onPointerMove: _onBackPointerMove,
-        onPointerUp: _onBackPointerUp,
-        onPointerCancel: (_) => _resetBackPointer(),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: BackgroundParticles(season: widget.particleSeason),
-            ),
-            if (transcriptState == null)
-              const Center(child: PersonaLoadingMark(label: 'CHAT'))
-            else
-              GestureDetector(
-                onTap: _usesLiveHistory
-                    ? null
-                    : transcriptState.advanceAfterTyping,
-                child: Transcript(
-                  state: transcriptState,
-                  onLoadOlder: _usesLiveHistory ? _loadOlderMessages : null,
-                  bottomPadding: canSendMessages ? 180 : 78,
+    return PopScope(
+      canPop: !_isComposerOpen,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _isComposerOpen) _closeComposer();
+      },
+      child: Scaffold(
+        backgroundColor: kPersonaRed,
+        resizeToAvoidBottomInset: true,
+        body: Listener(
+          key: const ValueKey('chat_edge_back'),
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: _onBackPointerDown,
+          onPointerMove: _onBackPointerMove,
+          onPointerUp: _onBackPointerUp,
+          onPointerCancel: (_) => _resetBackPointer(),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: BackgroundParticles(season: widget.particleSeason),
+              ),
+              if (transcriptState == null)
+                const Center(child: PersonaLoadingMark(label: 'CHAT'))
+              else
+                GestureDetector(
+                  onTap: _usesLiveHistory
+                      ? null
+                      : transcriptState.advanceAfterTyping,
+                  child: Transcript(
+                    state: transcriptState,
+                    onLoadOlder: _usesLiveHistory ? _loadOlderMessages : null,
+                    bottomPadding: canSendMessages ? 180 : 78,
+                  ),
+                ),
+
+              Align(
+                alignment: Alignment.topCenter,
+                child: ChatHeader(
+                  chatName: widget.chat.title,
+                  participants: participants,
+                  onBack: () => Navigator.of(context).pop(),
                 ),
               ),
 
-            Align(
-              alignment: Alignment.topCenter,
-              child: ChatHeader(
-                chatName: widget.chat.title,
-                participants: participants,
-                onBack: () => Navigator.of(context).pop(),
-              ),
-            ),
-
-            if (canSendMessages)
-              Align(
-                alignment: Alignment.bottomCenter,
-                child: transcriptState == null
-                    ? const SizedBox.shrink()
-                    : AnimatedBuilder(
-                        animation: transcriptState,
-                        builder: (context, _) => InputBar(
-                          showTypingIndicator: transcriptState.isSomeoneTyping,
-                          onSend: _onSend,
-                          onSendPhotos: _onSendPhotos,
-                          onSendFile: _onSendFile,
-                          onSendSticker: _onSendSticker,
-                          onSendGif: _onSendGif,
-                          gifItems: _gifItems,
-                          stickerItems: _stickerItems,
+              if (canSendMessages)
+                Align(
+                  alignment: Alignment.bottomCenter,
+                  child: transcriptState == null
+                      ? const SizedBox.shrink()
+                      : AnimatedBuilder(
+                          animation: transcriptState,
+                          builder: (context, _) => InputBar(
+                            controller: _inputBarController,
+                            onComposerOpenChanged: _setComposerOpen,
+                            showTypingIndicator:
+                                transcriptState.isSomeoneTyping,
+                            onSend: _onSend,
+                            onSendPhotos: _onSendPhotos,
+                            onSendFile: _onSendFile,
+                            onSendSticker: _onSendSticker,
+                            onSendGif: _onSendGif,
+                            gifItems: _gifItems,
+                            stickerItems: _stickerItems,
+                          ),
                         ),
-                      ),
-              ),
-          ],
+                ),
+            ],
+          ),
         ),
       ),
     );
