@@ -13,6 +13,7 @@ import 'widgets/background_particles.dart';
 import 'widgets/chat_header.dart';
 import 'widgets/chat_list_screen.dart';
 import 'widgets/input_bar.dart';
+import 'widgets/persona_progress.dart';
 import 'widgets/transcript.dart';
 
 const _activeAccountSlotKey = 'telegram.activeAccountSlot';
@@ -368,6 +369,10 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
+  static const _backSwipeStartWidth = 132.0;
+  static const _backSwipeTriggerDx = 46.0;
+  static const _backSwipeVerticalSlack = 74.0;
+
   TranscriptState? _transcriptState;
   StreamSubscription<Message>? _incomingSub;
   StreamSubscription<Message>? _messageUpdateSub;
@@ -536,7 +541,9 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   void _onBackPointerDown(PointerDownEvent event) {
     // The outer edge belongs to Android's system back gesture, so accept the
     // swipe from a wider in-app strip as well.
-    if (event.position.dx > 96 || _backSwipePointer != null) return;
+    if (event.position.dx > _backSwipeStartWidth || _backSwipePointer != null) {
+      return;
+    }
     _backSwipePointer = event.pointer;
     _backSwipeStart = event.position;
   }
@@ -544,11 +551,11 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   void _onBackPointerMove(PointerMoveEvent event) {
     if (event.pointer != _backSwipePointer || _backSwipeStart == null) return;
     final delta = event.position - _backSwipeStart!;
-    if (delta.dx < 0 || (delta.dy.abs() > 22 && delta.dy.abs() > delta.dx)) {
+    if (_shouldCancelBackSwipe(delta)) {
       _resetBackPointer();
       return;
     }
-    if (delta.dx >= 72 && delta.dx > delta.dy.abs()) {
+    if (_shouldTriggerBackSwipe(delta)) {
       _resetBackPointer();
       Navigator.of(context).pop();
     }
@@ -558,9 +565,22 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
     if (event.pointer != _backSwipePointer || _backSwipeStart == null) return;
     final delta = event.position - _backSwipeStart!;
     _resetBackPointer();
-    if (delta.dx >= 72 && delta.dx > delta.dy.abs()) {
+    if (_shouldTriggerBackSwipe(delta)) {
       Navigator.of(context).pop();
     }
+  }
+
+  bool _shouldCancelBackSwipe(Offset delta) {
+    final vertical = delta.dy.abs();
+    if (delta.dx < -8) return true;
+    return vertical > _backSwipeVerticalSlack && vertical > delta.dx * 1.45;
+  }
+
+  bool _shouldTriggerBackSwipe(Offset delta) {
+    final vertical = delta.dy.abs();
+    return delta.dx >= _backSwipeTriggerDx &&
+        vertical <= _backSwipeVerticalSlack &&
+        delta.dx >= vertical * 0.55;
   }
 
   void _resetBackPointer() {
@@ -598,9 +618,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
               child: BackgroundParticles(season: widget.particleSeason),
             ),
             if (transcriptState == null)
-              const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              )
+              const Center(child: PersonaLoadingMark(label: 'CHAT'))
             else
               GestureDetector(
                 onTap: _usesLiveHistory

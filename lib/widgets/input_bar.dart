@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'composer_panel.dart';
 import 'typing_indicator.dart';
 import '../services/chat_repository.dart';
+import 'persona_progress.dart';
 
 typedef SendPhotosCallback =
     Future<void> Function(List<String> paths, String caption);
@@ -342,12 +343,11 @@ class _InputBarState extends State<InputBar> {
                                 width: 30,
                                 height: 30,
                                 child: _isSendingMedia
-                                    ? const Padding(
-                                        padding: EdgeInsets.all(5),
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 3,
-                                          color: Color(0xFFF70000),
-                                        ),
+                                    ? const PersonaProgressBar(
+                                        width: 30,
+                                        height: 8,
+                                        borderColor: Colors.black,
+                                        trackColor: Colors.white,
                                       )
                                     : const Padding(
                                         padding: EdgeInsets.all(6),

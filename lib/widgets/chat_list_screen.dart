@@ -8,6 +8,7 @@ import '../theme/persona_colors.dart';
 import 'background_particles.dart';
 import 'chat_list_item.dart';
 import 'chat_sections.dart';
+import 'persona_progress.dart';
 
 enum _ChatSection { chats, pinned, search, settings, profile }
 
@@ -312,9 +313,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Widget _buildChatsSection() {
     final chats = _chats;
     if (chats == null) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
-      );
+      return const Center(child: PersonaLoadingMark(label: 'CHATS'));
     }
     final mainChats = chats.where((chat) => !chat.isArchived).toList();
     return ListView.builder(
@@ -336,9 +335,7 @@ class _ChatListScreenState extends State<ChatListScreen> {
   Widget _buildPinnedSection() {
     final chats = _chats;
     if (chats == null) {
-      return const Center(
-        child: CircularProgressIndicator(color: Colors.white),
-      );
+      return const Center(child: PersonaLoadingMark(label: 'PINNED'));
     }
     return PinnedSection(
       chats: chats.where((chat) => chat.isPinned && !chat.isArchived).toList(),
@@ -414,9 +411,7 @@ class _ArchiveScreenState extends State<_ArchiveScreen> {
               child: BackgroundParticles(season: widget.particleSeason),
             ),
             if (chats == null)
-              const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              )
+              const Center(child: PersonaLoadingMark(label: 'LOADING'))
             else if (chats.isEmpty)
               const Center(
                 child: Text(

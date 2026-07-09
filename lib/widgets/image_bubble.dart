@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../models/message.dart';
+import 'persona_progress.dart';
 
 // Large image bubble — Persona 5 IM photo style:
 //   • full-width photo frame, slightly tilted, very thick black border
@@ -155,7 +156,7 @@ class ImageBubble extends StatelessWidget {
                   child: Opacity(
                     opacity: alpha.clamp(0.0, 1.0),
                     child: message.imagePaths.isEmpty
-                        ? const _MediaLoadingPlaceholder(label: 'PHOTO')
+                        ? const _MediaLoadingPlaceholder(label: 'LOADING')
                         : message.imagePaths.length > 1
                         ? _AlbumGrid(
                             paths: message.imagePaths,
@@ -183,28 +184,9 @@ class _MediaLoadingPlaceholder extends StatelessWidget {
     return ColoredBox(
       color: const Color(0xFF171717),
       child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 28,
-              height: 28,
-              child: CircularProgressIndicator(
-                color: Color(0xFFF70000),
-                strokeWidth: 4,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Text(
-              label,
-              style: const TextStyle(
-                color: Colors.white,
-                fontFamily: 'OptimaNova',
-                fontSize: 13,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
+        child: SizedBox(
+          width: 150,
+          child: PersonaLoadingMark(label: label, width: 132),
         ),
       ),
     );

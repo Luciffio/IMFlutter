@@ -7,6 +7,7 @@ import 'package:video_player/video_player.dart';
 import '../models/message.dart';
 import '../theme/persona_colors.dart';
 import 'persona_avatar.dart';
+import 'persona_progress.dart';
 
 // Sticker message — avatar on the left, bare transparent sticker on the right.
 // Supported formats:
@@ -165,16 +166,7 @@ class _StickerLoadingPlaceholder extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: SizedBox(
-        width: 34,
-        height: 34,
-        child: CircularProgressIndicator(
-          color: Color(0xFFF70000),
-          strokeWidth: 5,
-        ),
-      ),
-    );
+    return const Center(child: PersonaLoadingMark(width: 108));
   }
 }
 

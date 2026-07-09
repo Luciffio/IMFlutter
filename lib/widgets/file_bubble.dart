@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/message.dart';
+import 'persona_progress.dart';
 
 class FileBubble extends StatelessWidget {
   final Message message;
@@ -112,11 +113,11 @@ class FileBubble extends StatelessWidget {
                         ),
                         if (message.filePath == null)
                           const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              color: Color(0xFFF70000),
-                              strokeWidth: 3,
+                            width: 48,
+                            child: PersonaProgressBar(
+                              width: 42,
+                              height: 9,
+                              borderColor: Colors.white70,
                             ),
                           )
                         else

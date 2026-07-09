@@ -71,9 +71,9 @@ void main() {
     expect(edgeDetector, findsOneWidget);
     final detectorRect = tester.getRect(edgeDetector);
     final gesture = await tester.startGesture(
-      Offset(detectorRect.left + 72, detectorRect.center.dy),
+      Offset(detectorRect.left + 118, detectorRect.center.dy),
     );
-    await gesture.moveBy(const Offset(90, 0));
+    await gesture.moveBy(const Offset(52, 34));
     await tester.pump(const Duration(milliseconds: 50));
     await gesture.up();
     await tester.pump(const Duration(milliseconds: 500));
