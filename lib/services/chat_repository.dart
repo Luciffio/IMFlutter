@@ -2,6 +2,13 @@ import '../models/auth_session.dart';
 import '../models/chat_summary.dart';
 import '../models/message.dart';
 
+class ComposerMediaItem {
+  final String path;
+  final String label;
+
+  const ComposerMediaItem({required this.path, required this.label});
+}
+
 /// Abstraction over the chat backend.
 ///
 /// Active implementation: [MockChatRepository] (no real server).
@@ -72,6 +79,10 @@ abstract class ChatRepository {
   Future<void> setChatPinned(String chatId, bool isPinned);
 
   Future<void> setChatArchived(String chatId, bool isArchived);
+
+  Future<List<ComposerMediaItem>> getSavedStickers();
+
+  Future<List<ComposerMediaItem>> getSavedGifs();
 
   /// Current authentication/session state.
   Future<AuthSessionState> getAuthState();

@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 
 import 'composer_panel.dart';
 import 'typing_indicator.dart';
+import '../services/chat_repository.dart';
 
 typedef SendPhotosCallback =
     Future<void> Function(List<String> paths, String caption);
@@ -22,6 +23,8 @@ class InputBar extends StatefulWidget {
   final SendFileCallback? onSendFile;
   final SendStickerCallback? onSendSticker;
   final SendMediaCallback? onSendGif;
+  final List<ComposerMediaItem> gifItems;
+  final List<ComposerMediaItem> stickerItems;
   final bool showTypingIndicator;
 
   const InputBar({
@@ -31,6 +34,8 @@ class InputBar extends StatefulWidget {
     this.onSendFile,
     this.onSendSticker,
     this.onSendGif,
+    this.gifItems = const [],
+    this.stickerItems = const [],
     this.showTypingIndicator = false,
   });
 
@@ -231,6 +236,8 @@ class _InputBarState extends State<InputBar> {
                         _closePanel();
                         _runMediaSend((_) => widget.onSendSticker?.call(path));
                       },
+                      gifItems: widget.gifItems,
+                      stickerItems: widget.stickerItems,
                     ),
                   ),
           ),

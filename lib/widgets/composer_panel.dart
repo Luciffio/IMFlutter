@@ -1,4 +1,8 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+
+import '../services/chat_repository.dart';
 
 enum ComposerPanelMode { none, attachments, emoji, gifs, stickers }
 
@@ -10,6 +14,8 @@ class ComposerPanel extends StatelessWidget {
   final ValueChanged<String> onEmojiSelected;
   final ValueChanged<String> onGifSelected;
   final ValueChanged<String> onStickerSelected;
+  final List<ComposerMediaItem> gifItems;
+  final List<ComposerMediaItem> stickerItems;
 
   const ComposerPanel({
     super.key,
@@ -20,6 +26,8 @@ class ComposerPanel extends StatelessWidget {
     required this.onEmojiSelected,
     required this.onGifSelected,
     required this.onStickerSelected,
+    this.gifItems = const [],
+    this.stickerItems = const [],
   });
 
   static const _emojis = [
@@ -76,8 +84,14 @@ class ComposerPanel extends StatelessWidget {
       emojis: _emojis,
       onSelected: onEmojiSelected,
     ),
-    ComposerPanelMode.gifs => _GifGrid(onSelected: onGifSelected),
-    ComposerPanelMode.stickers => _StickerGrid(onSelected: onStickerSelected),
+    ComposerPanelMode.gifs => _GifGrid(
+      items: gifItems,
+      onSelected: onGifSelected,
+    ),
+    ComposerPanelMode.stickers => _StickerGrid(
+      items: stickerItems,
+      onSelected: onStickerSelected,
+    ),
     ComposerPanelMode.none => const SizedBox.shrink(),
   };
 }
@@ -283,12 +297,21 @@ class _EmojiGrid extends StatelessWidget {
 }
 
 class _GifGrid extends StatelessWidget {
+  final List<ComposerMediaItem> items;
   final ValueChanged<String> onSelected;
 
-  const _GifGrid({required this.onSelected});
+  const _GifGrid({required this.items, required this.onSelected});
 
   @override
   Widget build(BuildContext context) {
+    final visibleItems = items.isEmpty
+        ? const [
+            ComposerMediaItem(
+              path: 'assets/stickers/persona4.gif',
+              label: 'GIF',
+            ),
+          ]
+        : items;
     return GridView.count(
       padding: const EdgeInsets.fromLTRB(14, 6, 14, 14),
       crossAxisCount: 2,
@@ -296,37 +319,49 @@ class _GifGrid extends StatelessWidget {
       mainAxisSpacing: 8,
       crossAxisSpacing: 8,
       children: [
-        _MediaTile(
-          path: 'assets/stickers/persona4.gif',
-          label: 'PERSONA 4',
-          onTap: () => onSelected('assets/stickers/persona4.gif'),
-        ),
+        for (final item in visibleItems.take(24))
+          _MediaTile(
+            path: item.path,
+            label: item.label,
+            onTap: () => onSelected(item.path),
+          ),
       ],
     );
   }
 }
 
 class _StickerGrid extends StatelessWidget {
+  final List<ComposerMediaItem> items;
   final ValueChanged<String> onSelected;
 
-  const _StickerGrid({required this.onSelected});
+  const _StickerGrid({required this.items, required this.onSelected});
 
   @override
   Widget build(BuildContext context) {
+    final visibleItems = items.isEmpty
+        ? const [
+            ComposerMediaItem(
+              path: 'assets/stickers/sticker.webp',
+              label: 'STICKER',
+            ),
+            ComposerMediaItem(
+              path: 'assets/stickers/sticker.webm',
+              label: 'VIDEO',
+            ),
+          ]
+        : items;
     return GridView.count(
       padding: const EdgeInsets.fromLTRB(14, 6, 14, 14),
       crossAxisCount: 3,
       mainAxisSpacing: 8,
       crossAxisSpacing: 8,
       children: [
-        _MediaTile(
-          path: 'assets/stickers/sticker.webp',
-          label: 'STICKER',
-          onTap: () => onSelected('assets/stickers/sticker.webp'),
-        ),
-        _VideoStickerTile(
-          onTap: () => onSelected('assets/stickers/sticker.webm'),
-        ),
+        for (final item in visibleItems.take(24))
+          _MediaTile(
+            path: item.path,
+            label: item.label,
+            onTap: () => onSelected(item.path),
+          ),
       ],
     );
   }
@@ -354,7 +389,7 @@ class _MediaTile extends StatelessWidget {
           children: [
             Padding(
               padding: const EdgeInsets.all(8),
-              child: Image.asset(path, fit: BoxFit.contain),
+              child: _MediaPreview(path: path),
             ),
             Positioned(
               left: 5,
@@ -380,33 +415,32 @@ class _MediaTile extends StatelessWidget {
   }
 }
 
-class _VideoStickerTile extends StatelessWidget {
-  final VoidCallback onTap;
+class _MediaPreview extends StatelessWidget {
+  final String path;
 
-  const _VideoStickerTile({required this.onTap});
+  const _MediaPreview({required this.path});
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: CustomPaint(
-        painter: const _MediaTilePainter(),
-        child: const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.play_circle_fill, color: Colors.black, size: 42),
-            SizedBox(height: 5),
-            Text(
-              'VIDEO',
-              style: TextStyle(
-                color: Colors.black,
-                fontFamily: 'OptimaNova',
-                fontSize: 10,
-                fontWeight: FontWeight.w900,
-              ),
-            ),
-          ],
-        ),
+    final lower = path.toLowerCase();
+    final isVideo =
+        lower.endsWith('.webm') ||
+        lower.endsWith('.mp4') ||
+        lower.endsWith('.mov') ||
+        lower.endsWith('.tgs');
+    if (isVideo) {
+      return const Center(
+        child: Icon(Icons.play_circle_fill, color: Colors.black, size: 42),
+      );
+    }
+    if (path.startsWith('assets/')) {
+      return Image.asset(path, fit: BoxFit.contain);
+    }
+    return Image.file(
+      File(path),
+      fit: BoxFit.contain,
+      errorBuilder: (_, _, _) => const Center(
+        child: Icon(Icons.broken_image, color: Colors.black, size: 36),
       ),
     );
   }

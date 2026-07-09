@@ -376,6 +376,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   bool _usesLiveHistory = false;
   bool _loadingOlderMessages = false;
   bool _hasMoreOlderMessages = true;
+  List<ComposerMediaItem> _gifItems = const [];
+  List<ComposerMediaItem> _stickerItems = const [];
   int? _backSwipePointer;
   Offset? _backSwipeStart;
 
@@ -383,6 +385,7 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _loadTranscript();
+    unawaited(_loadComposerMedia());
 
     _incomingSub = widget.repository.incomingMessages.listen((msg) {
       if (msg.chatId == widget.chat.id) {
@@ -398,6 +401,22 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
       if (update.chatId != widget.chat.id) return;
       _isSomeoneTyping = update.isTyping;
       _transcriptState?.setSomeoneTyping(update.isTyping);
+    });
+  }
+
+  Future<void> _loadComposerMedia() async {
+    final results = await Future.wait([
+      widget.repository.getSavedGifs().catchError(
+        (_) => const <ComposerMediaItem>[],
+      ),
+      widget.repository.getSavedStickers().catchError(
+        (_) => const <ComposerMediaItem>[],
+      ),
+    ]);
+    if (!mounted) return;
+    setState(() {
+      _gifItems = results[0];
+      _stickerItems = results[1];
     });
   }
 
@@ -617,6 +636,8 @@ class _ChatScreenState extends State<ChatScreen> with TickerProviderStateMixin {
                           onSendFile: _onSendFile,
                           onSendSticker: _onSendSticker,
                           onSendGif: _onSendGif,
+                          gifItems: _gifItems,
+                          stickerItems: _stickerItems,
                         ),
                       ),
               ),

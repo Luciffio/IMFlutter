@@ -46,6 +46,7 @@ class ChatSummary {
   final int unreadCount;
   final bool isMarkedUnread;
   final bool isArchived;
+  final bool isSavedMessages;
 
   const ChatSummary({
     required this.id,
@@ -63,6 +64,7 @@ class ChatSummary {
     this.unreadCount = 0,
     this.isMarkedUnread = false,
     this.isArchived = false,
+    this.isSavedMessages = false,
   });
 
   bool get isPinned => pinnedAt != null;
@@ -90,6 +92,7 @@ class ChatSummary {
     int? unreadCount,
     bool? isMarkedUnread,
     bool? isArchived,
+    bool? isSavedMessages,
   }) {
     return ChatSummary(
       id: id ?? this.id,
@@ -107,6 +110,7 @@ class ChatSummary {
       unreadCount: unreadCount ?? this.unreadCount,
       isMarkedUnread: isMarkedUnread ?? this.isMarkedUnread,
       isArchived: isArchived ?? this.isArchived,
+      isSavedMessages: isSavedMessages ?? this.isSavedMessages,
     );
   }
 }

@@ -216,6 +216,21 @@ class MockChatRepository implements ChatRepository {
   }
 
   @override
+  Future<List<ComposerMediaItem>> getSavedStickers() async {
+    return const [
+      ComposerMediaItem(path: 'assets/stickers/sticker.webp', label: 'STICKER'),
+      ComposerMediaItem(path: 'assets/stickers/sticker.webm', label: 'VIDEO'),
+    ];
+  }
+
+  @override
+  Future<List<ComposerMediaItem>> getSavedGifs() async {
+    return const [
+      ComposerMediaItem(path: 'assets/stickers/persona4.gif', label: 'GIF'),
+    ];
+  }
+
+  @override
   Future<AuthSessionState> getAuthState() async {
     return _authState;
   }
