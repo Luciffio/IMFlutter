@@ -13,7 +13,7 @@ import 'sticker_bubble.dart';
 // ── Per-message animation state ────────────────────────────────────────────
 
 class _EntryState {
-  final Message message;
+  Message message;
   final int position;
   bool disposed = false;
 
@@ -174,8 +174,20 @@ class TranscriptState extends ChangeNotifier {
     if (id == null || _disposed) return;
     final index = _messages.indexWhere((message) => message.id == id);
     if (index < 0) return;
+    final previous = _messages[index];
     _messages[index] = replacement;
-    _rebuildVisibleEntries();
+    final canUpdateInPlace =
+        previous.kind == replacement.kind &&
+        previous.sender == replacement.sender &&
+        previous.text == replacement.text;
+    if (canUpdateInPlace) {
+      final entryIndex = _entries.indexWhere((entry) => entry.message.id == id);
+      if (entryIndex >= 0) {
+        _entries[entryIndex].message = replacement;
+      }
+    } else {
+      _rebuildVisibleEntries();
+    }
     _suppressNextAutoScroll = true;
     notifyListeners();
   }

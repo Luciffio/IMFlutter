@@ -112,12 +112,13 @@ class FileBubble extends StatelessWidget {
                           ),
                         ),
                         if (message.filePath == null)
-                          const SizedBox(
+                          SizedBox(
                             width: 48,
                             child: PersonaProgressBar(
                               width: 42,
                               height: 9,
                               borderColor: Colors.white70,
+                              value: message.mediaProgress,
                             ),
                           )
                         else

@@ -584,6 +584,11 @@ class MockChatRepository implements ChatRepository {
       filePath: message.filePath,
       fileName: message.fileName,
       fileSize: message.fileSize,
+      albumImagePaths: message.albumImagePaths,
+      mediaFileIds: message.mediaFileIds,
+      mediaProgress: message.mediaProgress,
+      mediaAlbumId: message.mediaAlbumId,
+      mediaKind: message.mediaKind,
     );
   }
 }

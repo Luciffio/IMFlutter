@@ -44,6 +44,9 @@ class TelegramRepository implements ChatRepository {
   final _userActivityById = <int, ChatActivity>{};
   final _botUserIds = <int>{};
   final _typingSendersByChat = <String, Set<String>>{};
+  final _fileStateById = <int, TdJson>{};
+  final _messageRefsByFileId =
+      <int, Set<({String chatId, String messageId})>>{};
   int? _myUserId;
 
   StreamSubscription<TdJson>? _updatesSub;
@@ -903,6 +906,8 @@ class TelegramRepository implements ChatRepository {
         }
       case 'updateMessageContent':
         await _handleMessageContentUpdate(update);
+      case 'updateFile':
+        _handleFileUpdate(update['file'] as TdJson?);
     }
   }
 
@@ -932,6 +937,29 @@ class TelegramRepository implements ChatRepository {
         : _mergeMessageContent(cached, mapped);
     if (_upsertCachedMessage(message)) {
       _messageUpdateController.add(_cachedMessageOrSelf(message));
+    }
+  }
+
+  void _handleFileUpdate(TdJson? file) {
+    final fileId = _rememberFileState(file);
+    if (fileId == null) return;
+
+    final refs = _messageRefsByFileId[fileId];
+    if (refs == null || refs.isEmpty) return;
+    for (final ref in refs.toList(growable: false)) {
+      final messages = _messagesByChat[ref.chatId];
+      if (messages == null) continue;
+      final index = messages.indexWhere(
+        (message) => message.id == ref.messageId,
+      );
+      if (index < 0) continue;
+
+      final updated = _messageWithCurrentFileState(messages[index]);
+      if (identical(updated, messages[index])) continue;
+      messages[index] = updated;
+      if (!_messageUpdateController.isClosed) {
+        _messageUpdateController.add(updated);
+      }
     }
   }
 
@@ -1418,12 +1446,17 @@ class TelegramRepository implements ChatRepository {
   ) async {
     final base = await _mapMessage(rawMessages.first, hydrateMedia: false);
     final paths = <String>[];
+    final files = <TdJson>[];
     for (final raw in rawMessages) {
       final content = raw['content'] as TdJson?;
       final file = _largestPhotoFile(content?['photo'] as TdJson?);
-      final path = file == null ? null : _availableLocalFilePath(file);
+      if (file == null) continue;
+      files.add(file);
+      _rememberFileState(file);
+      final path = _availableLocalFilePath(file);
       if (path != null && path.isNotEmpty) paths.add(path);
     }
+    final fileIds = files.map(_fileId).whereType<int>().toList(growable: false);
     final message = Message(
       id: base.id,
       chatId: base.chatId,
@@ -1435,13 +1468,20 @@ class TelegramRepository implements ChatRepository {
       status: base.status,
       imagePath: paths.isEmpty ? base.imagePath : paths.first,
       albumImagePaths: List.unmodifiable(paths),
+      mediaFileIds: fileIds,
+      mediaProgress: _combinedFileProgress(fileIds),
       mediaAlbumId: albumId,
       mediaKind: MessageKind.image,
       avatarPath: base.avatarPath,
       avatarLabel: base.avatarLabel,
     );
+    _trackMessageMedia(message);
     if (paths.length < rawMessages.length) {
-      unawaited(_hydratePhotoAlbum(rawMessages, message));
+      for (final file in files) {
+        if (_availableLocalFilePath(file) == null) {
+          unawaited(_requestMessageMediaDownload(file));
+        }
+      }
     }
     return message;
   }
@@ -1462,6 +1502,7 @@ class TelegramRepository implements ChatRepository {
       _ => MessageKind.text,
     };
     final mediaFile = _mediaFile(content);
+    final mediaFileId = _rememberFileState(mediaFile);
     final localMediaPath = mediaFile == null
         ? null
         : _availableLocalFilePath(mediaFile);
@@ -1496,13 +1537,18 @@ class TelegramRepository implements ChatRepository {
       filePath: filePath,
       fileName: document?['file_name'] as String?,
       fileSize: fileSize is int ? fileSize : null,
+      mediaFileIds: mediaFileId == null ? const [] : [mediaFileId],
+      mediaProgress: mediaFileId == null
+          ? null
+          : _combinedFileProgress([mediaFileId]),
       mediaAlbumId: raw['media_album_id']?.toString(),
       mediaKind: mediaKind,
       avatarPath: senderProfile.avatarPath,
       avatarLabel: senderProfile.label,
     );
+    _trackMessageMedia(message);
     if (hydrateMedia && mediaFile != null && localMediaPath == null) {
-      unawaited(_hydrateMessageMedia(mediaFile, message));
+      unawaited(_requestMessageMediaDownload(mediaFile));
     }
     return message;
   }
@@ -1518,54 +1564,22 @@ class TelegramRepository implements ChatRepository {
     };
   }
 
-  Future<void> _hydrateMessageMedia(TdJson file, Message message) async {
-    final path = await _downloadFilePath(file);
-    if (path == null || path.isEmpty) return;
-    final updated = switch (message.kind) {
-      MessageKind.image => message.copyWith(imagePath: path),
-      MessageKind.file => message.copyWith(filePath: path),
-      MessageKind.gif => message.copyWith(gifPath: path),
-      MessageKind.sticker => message.copyWith(stickerPath: path),
-      MessageKind.text => message,
-    };
-    _replaceCachedMessage(updated);
-    if (!_messageUpdateController.isClosed) {
-      _messageUpdateController.add(_cachedMessageOrSelf(updated));
-    }
-  }
-
-  Future<void> _hydratePhotoAlbum(
-    List<TdJson> rawMessages,
-    Message message,
-  ) async {
-    final paths = <String>[];
-    for (final raw in rawMessages) {
-      final content = raw['content'] as TdJson?;
-      final path = await _downloadFilePath(
-        _largestPhotoFile(content?['photo'] as TdJson?),
-      );
-      if (path != null && path.isNotEmpty) paths.add(path);
-    }
-    if (paths.isEmpty) return;
-    final updated = message.copyWith(
-      imagePath: paths.first,
-      albumImagePaths: List.unmodifiable(paths),
-    );
-    _replaceCachedMessage(updated);
-    if (!_messageUpdateController.isClosed) {
-      _messageUpdateController.add(_cachedMessageOrSelf(updated));
-    }
-  }
-
-  void _replaceCachedMessage(Message updated) {
-    final chatId = updated.chatId;
-    final messageId = updated.id;
-    if (chatId == null || messageId == null) return;
-    final messages = _messagesByChat[chatId];
-    if (messages == null) return;
-    final index = messages.indexWhere((message) => message.id == messageId);
-    if (index >= 0) {
-      messages[index] = _mergeMessageMedia(updated, messages[index]);
+  Future<void> _requestMessageMediaDownload(TdJson file) async {
+    final fileId = _rememberFileState(file);
+    if (fileId == null) return;
+    try {
+      final current = await _gateway.invoke({
+        '@type': 'downloadFile',
+        'file_id': fileId,
+        'priority': 16,
+        'offset': 0,
+        'limit': 0,
+        'synchronous': false,
+      }, timeout: const Duration(seconds: 10));
+      _handleFileUpdate(current);
+    } catch (_) {
+      // TDLib may cancel an individual request while the chat is closing.
+      // A later updateFile event or reopening the chat will retry it.
     }
   }
 
@@ -1574,6 +1588,7 @@ class TelegramRepository implements ChatRepository {
     final messageId = message.id;
     if (chatId == null || messageId == null) return false;
     final messages = _messagesFor(chatId);
+    message = _messageWithCurrentFileState(message);
     final index = messages.indexWhere((item) => item.id == messageId);
     if (index < 0) {
       messages.add(message);
@@ -1604,6 +1619,10 @@ class TelegramRepository implements ChatRepository {
       albumImagePaths: incoming.albumImagePaths.isEmpty
           ? existing.albumImagePaths
           : incoming.albumImagePaths,
+      mediaFileIds: incoming.mediaFileIds.isEmpty
+          ? existing.mediaFileIds
+          : incoming.mediaFileIds,
+      mediaProgress: incoming.mediaProgress ?? existing.mediaProgress,
     );
   }
 
@@ -1626,6 +1645,10 @@ class TelegramRepository implements ChatRepository {
       albumImagePaths: content.albumImagePaths.isEmpty
           ? existing.albumImagePaths
           : content.albumImagePaths,
+      mediaFileIds: content.mediaFileIds.isEmpty
+          ? existing.mediaFileIds
+          : content.mediaFileIds,
+      mediaProgress: content.mediaProgress ?? existing.mediaProgress,
       mediaAlbumId: content.mediaAlbumId ?? existing.mediaAlbumId,
       mediaKind: content.mediaKind,
     );
@@ -1799,6 +1822,119 @@ class TelegramRepository implements ChatRepository {
     return small is TdJson ? small : null;
   }
 
+  int? _fileId(TdJson? file) {
+    final value = file?['id'];
+    return value is int ? value : null;
+  }
+
+  int? _rememberFileState(TdJson? file) {
+    final id = _fileId(file);
+    if (id == null || file == null) return null;
+    _fileStateById[id] = file;
+    return id;
+  }
+
+  void _trackMessageMedia(Message message) {
+    final chatId = message.chatId;
+    final messageId = message.id;
+    if (chatId == null || messageId == null) return;
+    final ref = (chatId: chatId, messageId: messageId);
+    for (final fileId in message.mediaFileIds) {
+      _messageRefsByFileId.putIfAbsent(fileId, () => {}).add(ref);
+    }
+  }
+
+  double? _combinedFileProgress(List<int> fileIds) {
+    if (fileIds.isEmpty) return null;
+    var total = 0.0;
+    for (final fileId in fileIds) {
+      total += _fileProgress(_fileStateById[fileId]);
+    }
+    return (total / fileIds.length).clamp(0.0, 1.0);
+  }
+
+  double _fileProgress(TdJson? file) {
+    if (file == null) return 0;
+    final local = file['local'] as TdJson?;
+    if (local?['is_downloading_completed'] == true ||
+        _availableLocalFilePath(file) != null) {
+      return 1;
+    }
+    final downloaded = local?['downloaded_size'];
+    final declaredSize = file['size'];
+    final expectedSize = file['expected_size'];
+    final size = declaredSize is int && declaredSize > 0
+        ? declaredSize
+        : expectedSize is int && expectedSize > 0
+        ? expectedSize
+        : 0;
+    if (downloaded is! int || downloaded <= 0 || size <= 0) return 0;
+    return (downloaded / size).clamp(0.0, 1.0);
+  }
+
+  Message _messageWithCurrentFileState(Message message) {
+    final fileIds = message.mediaFileIds;
+    if (fileIds.isEmpty) return message;
+
+    final progress = _combinedFileProgress(fileIds);
+    final paths = fileIds
+        .map(
+          (fileId) => _availableLocalFilePath(
+            _fileStateById[fileId] ?? const <String, dynamic>{},
+          ),
+        )
+        .whereType<String>()
+        .toList(growable: false);
+
+    switch (message.kind) {
+      case MessageKind.image:
+        if (fileIds.length > 1) {
+          if (_samePaths(message.albumImagePaths, paths) &&
+              message.mediaProgress == progress) {
+            return message;
+          }
+          return message.copyWith(
+            imagePath: paths.isEmpty ? null : paths.first,
+            albumImagePaths: List.unmodifiable(paths),
+            mediaProgress: progress,
+          );
+        }
+        final path = paths.firstOrNull;
+        if (message.imagePath == path && message.mediaProgress == progress) {
+          return message;
+        }
+        return message.copyWith(imagePath: path, mediaProgress: progress);
+      case MessageKind.file:
+        final path = paths.firstOrNull;
+        if (message.filePath == path && message.mediaProgress == progress) {
+          return message;
+        }
+        return message.copyWith(filePath: path, mediaProgress: progress);
+      case MessageKind.gif:
+        final path = paths.firstOrNull;
+        if (message.gifPath == path && message.mediaProgress == progress) {
+          return message;
+        }
+        return message.copyWith(gifPath: path, mediaProgress: progress);
+      case MessageKind.sticker:
+        final path = paths.firstOrNull;
+        if (message.stickerPath == path && message.mediaProgress == progress) {
+          return message;
+        }
+        return message.copyWith(stickerPath: path, mediaProgress: progress);
+      case MessageKind.text:
+        return message;
+    }
+  }
+
+  bool _samePaths(List<String> first, List<String> second) {
+    if (first.length != second.length) return false;
+    for (var index = 0; index < first.length; index++) {
+      if (first[index] != second[index]) return false;
+    }
+    return true;
+  }
+
   TdJson? _largestPhotoFile(TdJson? photo) {
     final sizes = photo?['sizes'];
     if (sizes is! List) return null;
@@ -1832,6 +1968,7 @@ class TelegramRepository implements ChatRepository {
 
   Future<String?> _downloadFilePath(TdJson? file) async {
     if (file == null) return null;
+    _rememberFileState(file);
 
     final localPath = _localFilePath(file);
     final availablePath = _availableLocalFilePath(file);
@@ -1849,6 +1986,7 @@ class TelegramRepository implements ChatRepository {
         'limit': 0,
         'synchronous': true,
       }, timeout: const Duration(seconds: 60));
+      _rememberFileState(downloaded);
       return _availableLocalFilePath(downloaded) ??
           _localFilePath(downloaded) ??
           localPath;

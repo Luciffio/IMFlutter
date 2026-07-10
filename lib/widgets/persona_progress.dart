@@ -6,6 +6,7 @@ class PersonaProgressBar extends StatefulWidget {
   final Color trackColor;
   final Color fillColor;
   final Color borderColor;
+  final double? value;
 
   const PersonaProgressBar({
     super.key,
@@ -14,6 +15,7 @@ class PersonaProgressBar extends StatefulWidget {
     this.trackColor = Colors.black,
     this.fillColor = const Color(0xFFF70000),
     this.borderColor = Colors.white,
+    this.value,
   });
 
   @override
@@ -30,7 +32,18 @@ class _PersonaProgressBarState extends State<PersonaProgressBar>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 980),
-    )..repeat();
+    );
+    if (widget.value == null) _controller.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant PersonaProgressBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value == null && oldWidget.value != null) {
+      _controller.repeat();
+    } else if (widget.value != null && oldWidget.value == null) {
+      _controller.stop();
+    }
   }
 
   @override
@@ -41,6 +54,22 @@ class _PersonaProgressBarState extends State<PersonaProgressBar>
 
   @override
   Widget build(BuildContext context) {
+    final value = widget.value;
+    if (value != null) {
+      return SizedBox(
+        width: widget.width,
+        height: widget.height,
+        child: CustomPaint(
+          painter: _PersonaProgressPainter(
+            progress: value.clamp(0.0, 1.0),
+            isDeterminate: true,
+            trackColor: widget.trackColor,
+            fillColor: widget.fillColor,
+            borderColor: widget.borderColor,
+          ),
+        ),
+      );
+    }
     return SizedBox(
       width: widget.width,
       height: widget.height,
@@ -49,6 +78,7 @@ class _PersonaProgressBarState extends State<PersonaProgressBar>
         builder: (context, _) => CustomPaint(
           painter: _PersonaProgressPainter(
             progress: _controller.value,
+            isDeterminate: false,
             trackColor: widget.trackColor,
             fillColor: widget.fillColor,
             borderColor: widget.borderColor,
@@ -61,12 +91,14 @@ class _PersonaProgressBarState extends State<PersonaProgressBar>
 
 class _PersonaProgressPainter extends CustomPainter {
   final double progress;
+  final bool isDeterminate;
   final Color trackColor;
   final Color fillColor;
   final Color borderColor;
 
   const _PersonaProgressPainter({
     required this.progress,
+    required this.isDeterminate,
     required this.trackColor,
     required this.fillColor,
     required this.borderColor,
@@ -92,8 +124,12 @@ class _PersonaProgressPainter extends CustomPainter {
 
     canvas.save();
     canvas.clipPath(inner);
-    final segmentWidth = size.width * 0.34;
-    final x = -segmentWidth + (size.width + segmentWidth) * progress;
+    final segmentWidth = isDeterminate
+        ? size.width * progress
+        : size.width * 0.34;
+    final x = isDeterminate
+        ? 0.0
+        : -segmentWidth + (size.width + segmentWidth) * progress;
     final segment = Path()
       ..moveTo(x, 0)
       ..lineTo(x + segmentWidth, 0)
@@ -107,6 +143,7 @@ class _PersonaProgressPainter extends CustomPainter {
   @override
   bool shouldRepaint(_PersonaProgressPainter oldDelegate) =>
       oldDelegate.progress != progress ||
+      oldDelegate.isDeterminate != isDeterminate ||
       oldDelegate.trackColor != trackColor ||
       oldDelegate.fillColor != fillColor ||
       oldDelegate.borderColor != borderColor;
@@ -115,8 +152,14 @@ class _PersonaProgressPainter extends CustomPainter {
 class PersonaLoadingMark extends StatelessWidget {
   final String? label;
   final double width;
+  final double? progress;
 
-  const PersonaLoadingMark({super.key, this.label, this.width = 160});
+  const PersonaLoadingMark({
+    super.key,
+    this.label,
+    this.width = 160,
+    this.progress,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -124,7 +167,7 @@ class PersonaLoadingMark extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        PersonaProgressBar(width: width),
+        PersonaProgressBar(width: width, value: progress),
         if (text != null && text.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(

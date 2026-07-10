@@ -156,7 +156,10 @@ class ImageBubble extends StatelessWidget {
                   child: Opacity(
                     opacity: alpha.clamp(0.0, 1.0),
                     child: message.imagePaths.isEmpty
-                        ? const _MediaLoadingPlaceholder(label: 'LOADING')
+                        ? _MediaLoadingPlaceholder(
+                            label: 'LOADING',
+                            progress: message.mediaProgress,
+                          )
                         : message.imagePaths.length > 1
                         ? _AlbumGrid(
                             paths: message.imagePaths,
@@ -176,8 +179,9 @@ class ImageBubble extends StatelessWidget {
 
 class _MediaLoadingPlaceholder extends StatelessWidget {
   final String label;
+  final double? progress;
 
-  const _MediaLoadingPlaceholder({required this.label});
+  const _MediaLoadingPlaceholder({required this.label, this.progress});
 
   @override
   Widget build(BuildContext context) {
@@ -186,7 +190,11 @@ class _MediaLoadingPlaceholder extends StatelessWidget {
       child: Center(
         child: SizedBox(
           width: 150,
-          child: PersonaLoadingMark(label: label, width: 132),
+          child: PersonaLoadingMark(
+            label: label,
+            width: 132,
+            progress: progress,
+          ),
         ),
       ),
     );

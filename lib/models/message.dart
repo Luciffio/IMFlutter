@@ -55,6 +55,8 @@ class Message {
   final String? avatarPath;
   final String? avatarLabel;
   final List<String> albumImagePaths;
+  final List<int> mediaFileIds;
+  final double? mediaProgress;
   final String? mediaAlbumId;
   final MessageKind mediaKind;
 
@@ -74,6 +76,8 @@ class Message {
     this.avatarPath,
     this.avatarLabel,
     this.albumImagePaths = const [],
+    this.mediaFileIds = const [],
+    this.mediaProgress,
     this.mediaAlbumId,
     this.mediaKind = MessageKind.text,
   });
@@ -86,6 +90,16 @@ class Message {
   bool get isGif => mediaKind == MessageKind.gif || gifPath != null;
   bool get isFile => mediaKind == MessageKind.file || filePath != null;
   bool get isAnimatedMedia => isSticker || isGif;
+  bool get isMediaLoading =>
+      mediaFileIds.isNotEmpty &&
+      (mediaProgress ?? 0) < 1 &&
+      switch (kind) {
+        MessageKind.image => imagePaths.length < mediaFileIds.length,
+        MessageKind.file => filePath == null,
+        MessageKind.gif => gifPath == null,
+        MessageKind.sticker => stickerPath == null,
+        MessageKind.text => false,
+      };
   String? get animatedMediaPath => gifPath ?? stickerPath;
   List<String> get imagePaths {
     if (albumImagePaths.isNotEmpty) return albumImagePaths;
@@ -109,6 +123,8 @@ class Message {
     String? gifPath,
     String? filePath,
     List<String>? albumImagePaths,
+    List<int>? mediaFileIds,
+    double? mediaProgress,
   }) {
     return Message(
       id: id,
@@ -126,6 +142,8 @@ class Message {
       avatarPath: avatarPath,
       avatarLabel: avatarLabel,
       albumImagePaths: albumImagePaths ?? this.albumImagePaths,
+      mediaFileIds: mediaFileIds ?? this.mediaFileIds,
+      mediaProgress: mediaProgress ?? this.mediaProgress,
       mediaAlbumId: mediaAlbumId,
       mediaKind: mediaKind,
     );

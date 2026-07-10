@@ -138,7 +138,7 @@ class StickerBubble extends StatelessWidget {
   Widget _media() {
     final path = _path;
     if (path == null || path.isEmpty) {
-      return const _StickerLoadingPlaceholder();
+      return _StickerLoadingPlaceholder(progress: message.mediaProgress);
     }
     if (_isLottie) return _TgsSticker(path: path, size: _kSize);
     if (_isVideo) return _WebmSticker(path: path, size: _kSize);
@@ -162,11 +162,13 @@ class StickerBubble extends StatelessWidget {
 }
 
 class _StickerLoadingPlaceholder extends StatelessWidget {
-  const _StickerLoadingPlaceholder();
+  final double? progress;
+
+  const _StickerLoadingPlaceholder({this.progress});
 
   @override
   Widget build(BuildContext context) {
-    return const Center(child: PersonaLoadingMark(width: 108));
+    return Center(child: PersonaLoadingMark(width: 108, progress: progress));
   }
 }
 
