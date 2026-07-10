@@ -59,6 +59,12 @@ class TelegramRepository implements ChatRepository {
   var _chatCacheLoaded = false;
   Future<void>? _chatRefresh;
   Timer? _chatCacheWriteTimer;
+  List<ComposerMediaItem>? _savedStickerItems;
+  List<ComposerMediaItem>? _savedGifItems;
+  DateTime? _savedStickerItemsAt;
+  DateTime? _savedGifItemsAt;
+  Future<List<ComposerMediaItem>>? _savedStickerItemsRequest;
+  Future<List<ComposerMediaItem>>? _savedGifItemsRequest;
 
   TelegramRepository({
     required this.apiId,
@@ -249,6 +255,10 @@ class TelegramRepository implements ChatRepository {
     await _gateway.invoke({'@type': 'logOut'});
     _ready = false;
     _chatsById.clear();
+    _savedStickerItems = null;
+    _savedGifItems = null;
+    _savedStickerItemsAt = null;
+    _savedGifItemsAt = null;
     await _clearChatCache();
     _emitChats(persist: false);
     _setAuthState(const AuthSessionState.signedOut());
@@ -526,6 +536,29 @@ class TelegramRepository implements ChatRepository {
     await connect();
     if (!_ready) return const [];
 
+    final cached = _freshComposerMediaCache(
+      _savedStickerItems,
+      _savedStickerItemsAt,
+    );
+    if (cached != null) return cached;
+    final active = _savedStickerItemsRequest;
+    if (active != null) return active;
+
+    final request = _loadSavedStickers();
+    _savedStickerItemsRequest = request;
+    try {
+      final items = await request;
+      _savedStickerItems = items;
+      _savedStickerItemsAt = DateTime.now();
+      return items;
+    } finally {
+      if (identical(_savedStickerItemsRequest, request)) {
+        _savedStickerItemsRequest = null;
+      }
+    }
+  }
+
+  Future<List<ComposerMediaItem>> _loadSavedStickers() async {
     final stickers = <TdJson>[];
     for (final request in const [
       {'@type': 'getFavoriteStickers'},
@@ -555,6 +588,26 @@ class TelegramRepository implements ChatRepository {
     await connect();
     if (!_ready) return const [];
 
+    final cached = _freshComposerMediaCache(_savedGifItems, _savedGifItemsAt);
+    if (cached != null) return cached;
+    final active = _savedGifItemsRequest;
+    if (active != null) return active;
+
+    final request = _loadSavedGifs();
+    _savedGifItemsRequest = request;
+    try {
+      final items = await request;
+      _savedGifItems = items;
+      _savedGifItemsAt = DateTime.now();
+      return items;
+    } finally {
+      if (identical(_savedGifItemsRequest, request)) {
+        _savedGifItemsRequest = null;
+      }
+    }
+  }
+
+  Future<List<ComposerMediaItem>> _loadSavedGifs() async {
     try {
       final result = await _gateway.invoke({
         '@type': 'getSavedAnimations',
@@ -567,6 +620,18 @@ class TelegramRepository implements ChatRepository {
     } catch (_) {
       return const [];
     }
+  }
+
+  List<ComposerMediaItem>? _freshComposerMediaCache(
+    List<ComposerMediaItem>? items,
+    DateTime? cachedAt,
+  ) {
+    if (items == null || cachedAt == null) return null;
+    if (DateTime.now().difference(cachedAt) > const Duration(minutes: 5)) {
+      return null;
+    }
+    if (items.any((item) => !File(item.path).existsSync())) return null;
+    return items;
   }
 
   Future<List<ComposerMediaItem>> _mediaItemsFromObjects(

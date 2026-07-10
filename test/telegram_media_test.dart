@@ -220,6 +220,83 @@ void main() {
     await repository.disconnect();
   });
 
+  test('caches saved stickers and GIFs across chat opens', () async {
+    final directory = await Directory.systemTemp.createTemp(
+      'personagram-composer-cache-test-',
+    );
+    addTearDown(() => directory.delete(recursive: true));
+    final sticker = File('${directory.path}/saved.webp')
+      ..writeAsStringSync('sticker');
+    final gif = File('${directory.path}/saved.gif')..writeAsStringSync('gif');
+    final gateway = _MediaGateway(
+      savedStickers: [
+        {
+          '@type': 'sticker',
+          'sticker': _remoteFile(
+            601,
+            size: sticker.lengthSync(),
+            downloadedSize: sticker.lengthSync(),
+            path: sticker.path,
+            isCompleted: true,
+          ),
+        },
+      ],
+      savedAnimations: [
+        {
+          '@type': 'animation',
+          'animation': _remoteFile(
+            602,
+            size: gif.lengthSync(),
+            downloadedSize: gif.lengthSync(),
+            path: gif.path,
+            isCompleted: true,
+          ),
+        },
+      ],
+    );
+    final repository = TelegramRepository(
+      apiId: 1,
+      apiHash: 'hash',
+      gateway: gateway,
+      databaseDirectoryPath: directory.path,
+    );
+
+    await repository.connect();
+    final stickers = await Future.wait([
+      repository.getSavedStickers(),
+      repository.getSavedStickers(),
+    ]);
+    final gifs = await Future.wait([
+      repository.getSavedGifs(),
+      repository.getSavedGifs(),
+    ]);
+    await repository.getSavedStickers();
+    await repository.getSavedGifs();
+
+    expect(stickers.first.single.path, sticker.path);
+    expect(gifs.first.single.path, gif.path);
+    expect(
+      gateway.requests.where(
+        (request) => request['@type'] == 'getFavoriteStickers',
+      ),
+      hasLength(1),
+    );
+    expect(
+      gateway.requests.where(
+        (request) => request['@type'] == 'getRecentStickers',
+      ),
+      hasLength(1),
+    );
+    expect(
+      gateway.requests.where(
+        (request) => request['@type'] == 'getSavedAnimations',
+      ),
+      hasLength(1),
+    );
+
+    await repository.disconnect();
+  });
+
   testWidgets('renders a four-photo album without layout errors', (
     tester,
   ) async {
@@ -261,9 +338,16 @@ class _MediaGateway extends TdlibGateway {
   var _messageId = 100;
   final TdJson? historyMessage;
   final TdJson? downloadFileResponse;
+  final List<TdJson> savedStickers;
+  final List<TdJson> savedAnimations;
   var _historyReturned = false;
 
-  _MediaGateway({this.historyMessage, this.downloadFileResponse});
+  _MediaGateway({
+    this.historyMessage,
+    this.downloadFileResponse,
+    this.savedStickers = const [],
+    this.savedAnimations = const [],
+  });
 
   void emitUpdate(TdJson update) => _updates.add(update);
 
@@ -295,6 +379,12 @@ class _MediaGateway extends TdlibGateway {
         };
       case 'downloadFile':
         return downloadFileResponse ?? {'@type': 'file'};
+      case 'getFavoriteStickers':
+        return {'@type': 'stickers', 'stickers': savedStickers};
+      case 'getRecentStickers':
+        return {'@type': 'stickers', 'stickers': const <TdJson>[]};
+      case 'getSavedAnimations':
+        return {'@type': 'animations', 'animations': savedAnimations};
       case 'sendMessage':
         return _messageFor(
           request['input_message_content'] as TdJson,
